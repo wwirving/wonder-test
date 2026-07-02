@@ -243,7 +243,7 @@
   }
 }
 
-/* soft frosted-glass control fill used by search / tags / cookie bar */
+/* soft frosted-glass control fill used by search / tags */
 @utility frosted {
   background-color: var(--input);
   -webkit-backdrop-filter: blur(16px);

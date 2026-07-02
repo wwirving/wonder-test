@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { abcDiatype } from "@/lib/fonts";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SiteHeader } from "@/components/site-header";
-import { CookieBanner } from "@/components/cookie-banner";
 import "./globals.css";
 
 // Absolute base for OG/canonical URLs. Prefer an explicit site URL, fall back to
@@ -64,7 +63,6 @@ export default function RootLayout({
           {/* Header + nav persist across every route; pages own their <main>. */}
           <SiteHeader />
           {children}
-          <CookieBanner />
         </ThemeProvider>
       </body>
     </html>

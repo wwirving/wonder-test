@@ -10,8 +10,8 @@ export default async function HomePage() {
   const videos = await getDiscoverVideos();
 
   // The Scroller owns the viewport scroll (hidden bar + soft edge fade), so the
-  // native page scrollbar never shows. Header/filter/cookie banner are all
-  // fixed, so this h-screen container is body's only in-flow child.
+  // native page scrollbar never shows. Header and filter are both fixed, so
+  // this h-screen container is body's only in-flow child.
   return (
     <Scroller
       hideScrollbar

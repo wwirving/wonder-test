@@ -3,10 +3,10 @@
 import { X } from "lucide-react";
 
 /**
- * Editor toaster — reuses the house frosted-notice styling (see `CookieBanner`).
+ * Editor toaster — reuses the house frosted-notice styling.
  * Announces async Twelve Labs results the moment they land ("Auto-tags ready →
  * Review") without disturbing the metadata the creator is typing. Anchored
- * bottom-right (stacking upward, above the one-time cookie notice).
+ * bottom-right (stacking upward).
  */
 
 export type EditorToast = {
