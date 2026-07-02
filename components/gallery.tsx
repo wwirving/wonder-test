@@ -55,7 +55,7 @@ export function Gallery({ videos }: { videos: DiscoverVideo[] }) {
 
       <div
         className={cn(
-          "mx-auto flex w-full px-5",
+          "mx-auto flex w-full px-5 pb-16",
           view === "grid"
             ? "max-w-none flex-row flex-wrap items-start gap-5 gap-y-14"
             : "max-w-[1920px] flex-col items-center gap-y-[var(--margin-xl)]",
