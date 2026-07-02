@@ -31,3 +31,15 @@ export function finiteNonNegative(value: unknown): number | null {
     ? value
     : null;
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * True if `value` is a canonical UUID string. Handy for screening `:id` route
+ * params before they reach a Postgres `uuid` column, which would otherwise
+ * throw ("invalid input syntax for type uuid") on malformed input.
+ */
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}

@@ -27,6 +27,8 @@ export function PreviewRail({
   onAccessTier,
   aiTags,
   aiClips,
+  onDelete,
+  deleting,
 }: {
   video: Video;
   /** Live title from the form, so the preview reflects what's being typed. */
@@ -37,8 +39,14 @@ export function PreviewRail({
   onAccessTier: (tier: AccessTier) => void;
   aiTags: AiStatus;
   aiClips: AiStatus;
+  /** Permanently delete this upload (row + cascaded clips/analytics). */
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   const fileRef = React.useRef<HTMLInputElement>(null);
+  // Two-step inline confirm — deleting is destructive, so require a deliberate
+  // second click rather than firing on the first (no dialog primitive here).
+  const [confirming, setConfirming] = React.useState(false);
 
   // The exact watch-page player, minus fullscreen — a real preview of the film
   // with the current poster and title.
@@ -140,6 +148,39 @@ export function PreviewRail({
           <AiStatusLine label="Clips" status={aiClips} />
         </div>
       </section>
+
+      {/* Delete — minimal, low-emphasis, tucked at the foot of the rail. */}
+      <div className="flex justify-end text-xsmall">
+        {confirming ? (
+          <span className="inline-flex items-center gap-3">
+            <span className="text-muted">Delete permanently?</span>
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              className="text-foreground underline underline-offset-2 transition hover:opacity-70 disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+              className="text-muted underline-offset-2 transition hover:text-foreground hover:underline disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="text-muted underline underline-offset-2 transition hover:text-foreground"
+          >
+            Delete upload
+          </button>
+        )}
+      </div>
     </div>
   );
 }

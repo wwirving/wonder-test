@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
 import type { VideoAnalytics } from "@/lib/types";
@@ -99,7 +100,10 @@ export function UploadEditor({
     video.status === "published",
   );
   const [publishing, setPublishing] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [saveState, setSaveState] = React.useState<SaveState>("idle");
+
+  const router = useRouter();
 
   const [toasts, setToasts] = React.useState<EditorToast[]>([]);
   const toastId = React.useRef(0);
@@ -276,6 +280,23 @@ export function UploadEditor({
     }
   }
 
+  // Delete this upload and return to the dashboard. A 404 means the row is
+  // already gone — treat it as success rather than surfacing an error. On
+  // success we navigate away, so `deleting` is intentionally left true (the view
+  // is unmounting) and only reset on the failure path.
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/uploads/${video.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`);
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setDeleting(false);
+      pushToast({ message: "Couldn't delete this upload — please try again." });
+    }
+  }
+
   // Count of auto-tag suggestions not yet applied (drives the tab badge).
   const tagsRemaining = React.useMemo(() => {
     if (!tagPayload) return 0;
@@ -388,6 +409,8 @@ export function UploadEditor({
             onAccessTier={setAccessTier}
             aiTags={aiTags}
             aiClips={aiClips}
+            onDelete={handleDelete}
+            deleting={deleting}
           />
         </div>
 
