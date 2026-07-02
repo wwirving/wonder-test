@@ -27,6 +27,31 @@ export function formatYear(date: Date | string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? "" : String(d.getFullYear());
 }
 
+/**
+ * Compact relative time for comment timestamps, e.g. "just now", "3h ago",
+ * "2d ago". Falls back to an absolute date past a week so old threads read clearly.
+ */
+export function formatRelativeTime(
+  date: Date | string | null | undefined,
+): string {
+  if (!date) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const secs = Math.round((Date.now() - d.getTime()) / 1000);
+  if (secs < 45) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  });
+}
+
 /** 1–2 letter monogram for the creator avatar, e.g. "Jordan Daniel Chesney" → "JC". */
 export function initials(name: string | null | undefined): string {
   if (!name) return "?";

@@ -3,23 +3,9 @@
 import * as React from "react";
 import { VideoPlayer, type PlayerProgress } from "@/components/video-player";
 import { type Video } from "@/lib/db/schema";
+import { getSessionId } from "@/lib/session";
 
-const SESSION_KEY = "wtv_session";
 const ENDPOINT = "/api/watch-events";
-
-/** A stable per-browser id so retention can be measured without accounts. */
-function getSessionId(): string {
-  try {
-    let id = localStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(SESSION_KEY, id);
-    }
-    return id;
-  } catch {
-    return "anon";
-  }
-}
 
 /**
  * Thin analytics wrapper around the (pure) player. The page can't hand a

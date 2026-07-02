@@ -28,13 +28,9 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      <div className="animate-enter [animation-delay:80ms]">
-        <OverviewStats totals={totals} />
-      </div>
+      <OverviewStats totals={totals} />
 
-      <div className="animate-enter [animation-delay:160ms]">
-        <VideoList videos={videos} />
-      </div>
+      <VideoList videos={videos} />
     </main>
   );
 }

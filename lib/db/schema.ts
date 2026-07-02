@@ -10,6 +10,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AiTagSuggestions } from "@/lib/twelve-labs/types";
@@ -148,6 +149,58 @@ export const clips = pgTable(
   ],
 );
 
+/* ---------- loves ---------- */
+// A viewer's "love" for a video. Keyed by the same anonymous per-browser
+// session id the watch analytics use (localStorage `wtv_session`) — no accounts —
+// with a unique (video, session) so a love is idempotent and toggle-able. The
+// aggregate count is the creator-facing engagement signal.
+
+export const loves = pgTable(
+  "loves",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // One love per (video, session): makes the insert idempotent and the count a
+    // true unique-viewer tally rather than a click counter.
+    uniqueIndex("loves_video_session_uniq").on(t.videoId, t.sessionId),
+    index("loves_video_id_idx").on(t.videoId),
+  ],
+);
+
+/* ---------- comments ---------- */
+// Community responses on the watch page. No auth: identity is the anonymous
+// playback session id (wtv_session) plus an optional free-text display name,
+// mirroring how watch_events attributes retention to a session.
+
+export const comments = pgTable(
+  "comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    authorName: text("author_name"), // optional; falls back to "Anonymous"
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("comments_video_id_idx").on(t.videoId),
+    index("comments_video_created_idx").on(t.videoId, t.createdAt),
+    check("comment_body_nonempty", sql`length(btrim(${t.body})) > 0`),
+  ],
+);
+
 /* ---------- inferred types ---------- */
 
 export type Video = typeof videos.$inferSelect;
@@ -156,3 +209,7 @@ export type WatchEvent = typeof watchEvents.$inferSelect;
 export type NewWatchEvent = typeof watchEvents.$inferInsert;
 export type Clip = typeof clips.$inferSelect;
 export type NewClip = typeof clips.$inferInsert;
+export type Love = typeof loves.$inferSelect;
+export type NewLove = typeof loves.$inferInsert;
+export type Comment = typeof comments.$inferSelect;
+export type NewComment = typeof comments.$inferInsert;

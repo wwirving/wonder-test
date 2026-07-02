@@ -7,6 +7,8 @@ export type VideoAnalytics = {
   meanPctWatched: number; // 0..1
   meanSecondsPlayed: number;
   completionRate: number; // 0..1 — share of views past the completion threshold
+  loves: number; // unique viewers who loved the film
+  comments: number; // community comments on the film
 };
 
 /** One row of the creator dashboard: a video plus its engagement roll-up. */
@@ -18,6 +20,8 @@ export type DashboardRow = {
   meanPctWatched: number;
   meanSecondsPlayed: number;
   completionRate: number;
+  loves: number;
+  comments: number;
 };
 
 /** Catalogue-wide roll-up shown at the top of the creator dashboard. */
@@ -28,6 +32,8 @@ export type DashboardTotals = {
   meanPctWatched: number; // 0..1 — views-weighted across the catalogue
   meanSecondsPlayed: number; // views-weighted mean watch time
   completionRate: number; // 0..1
+  loves: number; // total loves across the catalogue
+  comments: number; // total comments across the catalogue
 };
 
 /** The full creator dashboard: per-video rows plus catalogue totals. */

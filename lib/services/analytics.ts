@@ -10,6 +10,8 @@ import type {
   VideoAnalytics,
 } from "@/lib/types";
 import { listVideos } from "./videos";
+import { getLoveCount, getLoveCountsByVideo } from "./loves";
+import { countCommentsByVideo, countCommentsForVideo } from "./comments";
 
 /** A watch counts as "completed" once ≥90% of the runtime has been played. */
 export const COMPLETION_THRESHOLD = 0.9;
@@ -33,16 +35,22 @@ export async function getVideoAnalytics(
     .groupBy(watchEvents.sessionId)
     .as("sessions");
 
-  const [row] = await db
-    .select({
-      views: count(),
-      meanPctWatched: avg(sessions.maxPct).mapWith(Number),
-      meanSecondsPlayed: avg(sessions.maxSeconds).mapWith(Number),
-      completed: sql<number>`count(*) filter (where ${sessions.maxPct} >= ${COMPLETION_THRESHOLD})`.mapWith(
-        Number,
-      ),
-    })
-    .from(sessions);
+  // Loves and comments live in their own tables (no join here — a join with
+  // watch_events would fan the rows out and corrupt the retention averages).
+  const [[row], loves, comments] = await Promise.all([
+    db
+      .select({
+        views: count(),
+        meanPctWatched: avg(sessions.maxPct).mapWith(Number),
+        meanSecondsPlayed: avg(sessions.maxSeconds).mapWith(Number),
+        completed: sql<number>`count(*) filter (where ${sessions.maxPct} >= ${COMPLETION_THRESHOLD})`.mapWith(
+          Number,
+        ),
+      })
+      .from(sessions),
+    getLoveCount(db, videoId),
+    countCommentsForVideo(db, videoId),
+  ]);
 
   const views = Number(row?.views ?? 0);
   return {
@@ -51,6 +59,8 @@ export async function getVideoAnalytics(
     meanPctWatched: row?.meanPctWatched ?? 0,
     meanSecondsPlayed: row?.meanSecondsPlayed ?? 0,
     completionRate: views ? (row?.completed ?? 0) / views : 0,
+    loves,
+    comments,
   };
 }
 
@@ -94,6 +104,16 @@ export async function getCreatorDashboard(
     .groupBy(videos.id)
     .orderBy(videos.createdAt);
 
+  // Loves and comments per video, each in one grouped query (separate from the
+  // watch roll-up to avoid a row-multiplying join), keyed by id for the merge.
+  const [lovesByVideo, commentsByVideo] = await Promise.all([
+    getLoveCountsByVideo(
+      db,
+      perVideoRaw.map((r) => r.videoId),
+    ),
+    countCommentsByVideo(db),
+  ]);
+
   const perVideo: DashboardRow[] = perVideoRaw.map((r) => ({
     videoId: r.videoId,
     title: r.title,
@@ -102,6 +122,8 @@ export async function getCreatorDashboard(
     meanPctWatched: r.meanPctWatched ?? 0,
     meanSecondsPlayed: r.meanSecondsPlayed ?? 0,
     completionRate: r.views ? r.completed / r.views : 0,
+    loves: lovesByVideo.get(r.videoId) ?? 0,
+    comments: commentsByVideo.get(r.videoId) ?? 0,
   }));
 
   // Catalogue totals. Views-weighted retention/completion are exact global
@@ -120,6 +142,11 @@ export async function getCreatorDashboard(
     { videos: 0, drafts: 0, views: 0, pctViews: 0, secViews: 0, completed: 0 },
   );
 
+  let totalLoves = 0;
+  for (const n of lovesByVideo.values()) totalLoves += n;
+  let totalComments = 0;
+  for (const n of commentsByVideo.values()) totalComments += n;
+
   const totals: DashboardTotals = {
     videos: agg.videos,
     drafts: agg.drafts,
@@ -127,6 +154,8 @@ export async function getCreatorDashboard(
     meanPctWatched: agg.views ? agg.pctViews / agg.views : 0,
     meanSecondsPlayed: agg.views ? agg.secViews / agg.views : 0,
     completionRate: agg.views ? agg.completed / agg.views : 0,
+    loves: totalLoves,
+    comments: totalComments,
   };
 
   return { perVideo, totals };
@@ -158,6 +187,8 @@ export async function getCreatorDashboardView(
       meanPctWatched: m?.meanPctWatched ?? 0,
       meanSecondsPlayed: m?.meanSecondsPlayed ?? 0,
       completionRate: m?.completionRate ?? 0,
+      loves: m?.loves ?? 0,
+      comments: m?.comments ?? 0,
       posterUrl: v.posterUrl,
       runtimeSeconds: v.runtimeSeconds,
       aiTagsStatus: v.aiTagsStatus,

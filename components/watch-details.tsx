@@ -8,6 +8,8 @@ import { formatRuntime, formatYear } from "@/lib/format";
 import { Avatar } from "@/components/avatar";
 import { Tag } from "@/components/tag";
 import { Button } from "@/components/ui/button";
+import { ShareDialog } from "@/components/share-dialog";
+import { LoveButton } from "@/components/love-button";
 
 /**
  * The metadata beneath the player. Video-first: title, creator, year and
@@ -15,7 +17,13 @@ import { Button } from "@/components/ui/button";
  * the full synopsis) reveal on demand behind a single "More info" toggle, so
  * the page never competes with the film for attention.
  */
-export function WatchDetails({ video }: { video: Video }) {
+export function WatchDetails({
+  video,
+  loveCount,
+}: {
+  video: Video;
+  loveCount: number;
+}) {
   const [expanded, setExpanded] = React.useState(false);
   const year = formatYear(video.createdAt);
   const runtime = formatRuntime(video.runtimeSeconds);
@@ -26,11 +34,15 @@ export function WatchDetails({ video }: { video: Video }) {
     <section>
       <div className="flex items-start justify-between gap-4">
         <h1 className="text-balance text-medium text-foreground">{video.title}</h1>
-        {video.accessTier === "members" && (
-          <span className="frosted shrink-0 rounded-control px-2 py-1 text-xsmall text-subtle">
-            Members
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {video.accessTier === "members" && (
+            <span className="frosted rounded-control px-2 py-1 text-xsmall text-subtle">
+              Members
+            </span>
+          )}
+          <LoveButton videoId={video.id} initialCount={loveCount} />
+          <ShareDialog title={video.title} path={`/watch/${video.id}`} />
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-2 text-small text-muted">

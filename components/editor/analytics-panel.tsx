@@ -44,6 +44,16 @@ export function AnalyticsPanel({
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Views" value={analytics.views.toLocaleString("en-US")} />
         <Stat
+          label="Loves"
+          value={analytics.loves.toLocaleString("en-US")}
+          sub="Viewers who loved this film"
+        />
+        <Stat
+          label="Comments"
+          value={analytics.comments.toLocaleString("en-US")}
+          sub="From the community"
+        />
+        <Stat
           label="Avg. watched"
           value={formatPct(analytics.meanPctWatched)}
           sub="Mean share of the film played"

@@ -401,6 +401,8 @@ export function UploadEditor({
           meanPctWatched: 0,
           meanSecondsPlayed: 0,
           completionRate: 0,
+          loves: 0,
+          comments: 0,
         }
       : null;
 

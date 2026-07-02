@@ -13,14 +13,18 @@ import type { DashboardVideo } from "@/lib/types";
 export function VideoList({ videos }: { videos: DashboardVideo[] }) {
   return (
     <section>
-      <h2 className="mb-3 text-small text-muted">Your videos</h2>
+      <h2
+        className="mb-3 animate-enter text-small text-muted [animation-delay:360ms]"
+      >
+        Your videos
+      </h2>
       {videos.length === 0 ? (
         <Empty />
       ) : (
         <ul className="flex flex-col">
-          {videos.map((v) => (
+          {videos.map((v, i) => (
             <li key={v.videoId}>
-              <VideoRow video={v} />
+              <VideoRow video={v} index={i} />
             </li>
           ))}
         </ul>
@@ -29,16 +33,19 @@ export function VideoList({ videos }: { videos: DashboardVideo[] }) {
   );
 }
 
-function VideoRow({ video }: { video: DashboardVideo }) {
+function VideoRow({ video, index }: { video: DashboardVideo; index: number }) {
   const published = video.status === "published";
   const href = published
     ? `/upload/${video.videoId}?tab=analytics`
     : `/upload/${video.videoId}`;
 
+  // Continue the entrance after the stats sweep, capping the ramp so a long
+  // catalogue doesn't leave later rows sitting hidden for too long.
   return (
     <Link
       href={href}
-      className="group flex items-center gap-4 rounded-card px-3 py-3 transition hover:bg-hover"
+      className="group flex animate-enter items-center gap-4 rounded-card px-3 py-3 transition hover:bg-hover"
+      style={{ animationDelay: `${410 + Math.min(index, 10) * 65}ms` }}
     >
       <Poster url={video.posterUrl} runtimeSeconds={video.runtimeSeconds} />
 
@@ -100,12 +107,34 @@ function Poster({
 /** The metrics line: retention-first when live, status hint when not. */
 function Metrics({ video }: { video: DashboardVideo }) {
   if (video.status !== "published") return <>Not yet published</>;
-  if (video.views === 0) return <>Published · no views yet</>;
+  if (video.views === 0) {
+    return (
+      <>
+        Published · no views yet
+        {video.loves > 0 && <> · {video.loves.toLocaleString("en-US")} loves</>}
+        {video.comments > 0 && (
+          <>
+            {" "}
+            · {video.comments.toLocaleString("en-US")} comment
+            {video.comments === 1 ? "" : "s"}
+          </>
+        )}
+      </>
+    );
+  }
   return (
     <>
       {video.views.toLocaleString("en-US")} views ·{" "}
       {formatPct(video.meanPctWatched)} watched ·{" "}
-      {formatPct(video.completionRate)} complete
+      {formatPct(video.completionRate)} complete ·{" "}
+      {video.loves.toLocaleString("en-US")} loves
+      {video.comments > 0 && (
+        <>
+          {" "}
+          · {video.comments.toLocaleString("en-US")} comment
+          {video.comments === 1 ? "" : "s"}
+        </>
+      )}
     </>
   );
 }
@@ -144,7 +173,7 @@ function Nudge({ video }: { video: DashboardVideo }) {
 
 function Empty() {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-card border border-dashed border-[var(--input-strong)] px-6 py-12 text-center">
+    <div className="flex animate-enter flex-col items-center gap-2 rounded-card border border-dashed border-[var(--input-strong)] px-6 py-12 text-center [animation-delay:410ms]">
       <Film className="size-5 text-muted" strokeWidth={1.5} aria-hidden />
       <p className="text-small text-foreground">No videos yet</p>
       <p className="max-w-xs text-pretty text-xsmall text-muted">
