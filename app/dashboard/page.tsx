@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 /**
  * Creator dashboard: catalogue-wide engagement up top, then the creator's
  * videos (drafts + published) as scannable rows that drill into the editor.
- * Retention-first throughout — watch-through and completion over vanity views.
+ * Retention-first throughout. Watch-through and completion.
  */
 export default async function DashboardPage() {
   const { totals, videos } = await getCreatorDashboardView(db);
@@ -24,7 +24,7 @@ export default async function DashboardPage() {
       <header className="animate-enter">
         <h1 className="text-medium text-foreground">Dashboard</h1>
         <p className="mt-2 text-small text-muted">
-          How your films are being watched. Retention over vanity views.
+          How your films are being watched.
         </p>
       </header>
 

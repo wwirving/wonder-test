@@ -16,6 +16,14 @@ export function Gallery({ videos }: { videos: DiscoverVideo[] }) {
   const [view, setView] = React.useState<ViewMode>("grid");
   const [activeTags, setActiveTags] = React.useState<string[]>([]);
 
+  // Add/remove a single tag from the active filter. Shared by the filter bar
+  // chips and the clickable tags on each card.
+  const toggleTag = React.useCallback((tag: string) => {
+    setActiveTags((cur) =>
+      cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag],
+    );
+  }, []);
+
   // Only offer filters that actually appear in the feed (genre + mood).
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
@@ -29,7 +37,10 @@ export function Gallery({ videos }: { videos: DiscoverVideo[] }) {
   const filtered = React.useMemo(() => {
     if (activeTags.length === 0) return videos;
     return videos.filter((v) => {
-      const own = new Set([...v.genre, ...v.moodTags, ...v.tags]);
+      // Match against the same vocabulary the filter offers (genre + mood).
+      // `tags` is freeform, shown only on the watch page, and never selectable
+      // here, so it's deliberately excluded to keep the two in sync.
+      const own = new Set([...v.genre, ...v.moodTags]);
       return activeTags.every((t) => own.has(t));
     });
   }, [videos, activeTags]);
@@ -55,7 +66,7 @@ export function Gallery({ videos }: { videos: DiscoverVideo[] }) {
             key={v.id}
             className={cn(
               // Simple opacity fade-up on mount (house `animate-enter`). Cards are
-              // keyed by id, so it fires once per card — not on filter/view toggle.
+              // keyed by id, so it fires once per card, not on filter/view toggle.
               "animate-enter",
               // List items must fill a consistent width — without this, the flex
               // column (items-center, no stretch) collapses each card to its
@@ -66,7 +77,12 @@ export function Gallery({ videos }: { videos: DiscoverVideo[] }) {
                 : "w-full",
             )}
           >
-            <VideoCard video={v} view={view} />
+            <VideoCard
+              video={v}
+              view={view}
+              activeTags={activeTags}
+              onToggleTag={toggleTag}
+            />
           </div>
         ))}
 

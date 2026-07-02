@@ -47,7 +47,7 @@ function VideoRow({ video }: { video: DashboardVideo }) {
           <h3 className="truncate text-small text-foreground">
             {video.title || "Untitled film"}
           </h3>
-          <Tag className={cn(!published && "text-foreground")}>
+          <Tag className={cn("text-[0.7rem]", !published && "text-foreground")}>
             {published ? "Published" : "Draft"}
           </Tag>
           <Nudge video={video} />

@@ -59,10 +59,6 @@ export function AnalyticsPanel({
           sub="Mean length played"
         />
       </div>
-      <p className="text-xsmall text-muted">
-        Retention over vanity: watch-through and completion tell you more than
-        raw views. A per-moment drop-off curve is the natural next step.
-      </p>
     </div>
   );
 }

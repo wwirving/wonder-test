@@ -8,7 +8,7 @@ import { formatRuntime, formatYear } from "@/lib/format";
 import { useVideoBuffering } from "@/lib/use-segment-cycle";
 import type { DiscoverVideo } from "@/lib/mock-videos";
 import type { ViewMode } from "@/components/view-selector";
-import { Tag } from "@/components/tag";
+import { FilterTag, Tag } from "@/components/tag";
 import { Avatar } from "@/components/avatar";
 
 /**
@@ -165,9 +165,15 @@ function VideoDataTable({ video }: { video: DiscoverVideo }) {
 export function VideoCard({
   video,
   view,
+  activeTags,
+  onToggleTag,
 }: {
   video: DiscoverVideo;
   view: ViewMode;
+  /** Currently-active filter tags, so a card can show which of its tags are on. */
+  activeTags?: string[];
+  /** When provided, the card's mood tags become clickable filter toggles. */
+  onToggleTag?: (tag: string) => void;
 }) {
   const isGrid = view === "grid";
   const year = formatYear(video.createdAt);
@@ -179,26 +185,44 @@ export function VideoCard({
         <div className="mb-3">
           <VideoMedia video={video} />
         </div>
-        <h2 className="mb-1.5 text-small text-foreground">
-          <Link
-            href={`/watch/${video.id}`}
-            className="transition-opacity hover:opacity-65"
-          >
-            {video.title}
-          </Link>
-        </h2>
-        <div className="flex items-center gap-2 text-small text-muted">
-          <Avatar name={video.director} className="size-5" />
-          <span className="truncate text-subtle">
-            {video.director ?? "Unknown"}
-          </span>
-          {year && (
-            <>
-              <span aria-hidden>·</span>
-              <span>{year}</span>
-            </>
-          )}
+        <div className="flex items-center justify-between gap-3 text-small">
+          <h2 className="min-w-0 flex-1 truncate text-foreground">
+            <Link
+              href={`/watch/${video.id}`}
+              className="transition-opacity hover:opacity-65"
+            >
+              {video.title}
+            </Link>
+          </h2>
+          <div className="flex shrink-0 items-center gap-2 text-muted">
+            <Avatar name={video.director} className="size-5" />
+            <span className="max-w-[8rem] truncate text-subtle">
+              {video.director ?? "Unknown"}
+            </span>
+            {year && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="tabular-nums">{year}</span>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Small clickable mood tags, only on the discover feed (where a toggle
+            handler is passed), so the watch-page rail's grid cards stay clean. */}
+        {onToggleTag && video.moodTags.length > 0 && (
+          <div className="mt-3.5 flex flex-wrap gap-1">
+            {video.moodTags.map((t) => (
+              <FilterTag
+                key={t}
+                label={t}
+                active={activeTags?.includes(t) ?? false}
+                onToggle={() => onToggleTag(t)}
+                size="sm"
+              />
+            ))}
+          </div>
+        )}
       </article>
     );
   }
@@ -221,7 +245,7 @@ export function VideoCard({
         </h2>
 
         {video.synopsis && (
-          <p className="mb-[var(--margin-sm)] block text-medium">
+          <p className="mb-[var(--margin-sm)] line-clamp-3 text-medium">
             {video.synopsis}
           </p>
         )}
@@ -230,9 +254,18 @@ export function VideoCard({
 
         {video.moodTags.length > 0 && (
           <aside className="mt-[var(--margin-sm)] flex flex-wrap gap-1 text-small">
-            {video.moodTags.map((t) => (
-              <Tag key={t}>{t}</Tag>
-            ))}
+            {video.moodTags.map((t) =>
+              onToggleTag ? (
+                <FilterTag
+                  key={t}
+                  label={t}
+                  active={activeTags?.includes(t) ?? false}
+                  onToggle={() => onToggleTag(t)}
+                />
+              ) : (
+                <Tag key={t}>{t}</Tag>
+              ),
+            )}
           </aside>
         )}
       </div>

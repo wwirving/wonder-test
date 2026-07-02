@@ -46,17 +46,23 @@ export function FilterTag({
   label,
   active,
   onToggle,
+  size = "md",
 }: {
   label: string;
   active: boolean;
   onToggle: () => void;
+  /** "sm" scales the whole chip down (padding is em-based) for dense grids. */
+  size?: "sm" | "md";
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={active}
-      className="group relative inline-flex cursor-pointer rounded-control bg-input p-[0.5em] text-xsmall leading-none whitespace-nowrap text-subtle select-none"
+      className={cn(
+        "group relative inline-flex cursor-pointer rounded-control bg-input p-[0.5em] leading-none whitespace-nowrap text-subtle select-none",
+        size === "sm" ? "text-[0.7rem]" : "text-xsmall",
+      )}
     >
       {/* darkening overlay when active */}
       <span
