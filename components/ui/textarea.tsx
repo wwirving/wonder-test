@@ -1,0 +1,20 @@
+import * as React from "react";
+import { cn } from "@/lib/utils";
+
+/** Multi-line sibling of `Input` — same frosted fill, taller, top-aligned. */
+export const Textarea = React.forwardRef<
+  HTMLTextAreaElement,
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>
+>(({ className, ...props }, ref) => (
+  <textarea
+    ref={ref}
+    className={cn(
+      "min-h-24 w-full resize-y rounded-control bg-input px-3 py-2.5 text-small leading-relaxed text-foreground transition placeholder:text-muted",
+      "outline-none focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-muted",
+      "disabled:pointer-events-none disabled:opacity-50",
+      className,
+    )}
+    {...props}
+  />
+));
+Textarea.displayName = "Textarea";

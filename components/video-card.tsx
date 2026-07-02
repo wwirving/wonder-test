@@ -4,30 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { type Video } from "@/lib/db/schema";
-import { blurImageFor } from "@/lib/avatar";
 import { formatRuntime, formatYear } from "@/lib/format";
 import type { ViewMode } from "@/components/view-selector";
 import { Tag } from "@/components/tag";
-
-/** Circular avatar: a blurred table image standing in for a profile photo. */
-function Avatar({ name, className }: { name: string | null; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "relative inline-block shrink-0 overflow-hidden rounded-full outline outline-1 -outline-offset-1 outline-white/10",
-        className,
-      )}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={blurImageFor(name)}
-        alt=""
-        className="absolute inset-0 h-full w-full scale-125 object-cover blur-[4px]"
-      />
-    </span>
-  );
-}
+import { Avatar } from "@/components/avatar";
 
 /**
  * The 16:9 poster frame: static poster at rest, muted preview on hover

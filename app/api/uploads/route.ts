@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { createVideo, updateVideo } from "@/lib/services/videos";
 import { fileExt, fileStem, objectPath, publicUrl } from "@/lib/storage/paths";
 import type { UploadResponse } from "@/lib/types";
+import { finiteNonNegative } from "@/lib/utils";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -26,20 +27,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "filename is required" }, { status: 400 });
   }
 
+  // Whole non-negative seconds (the column is an integer), or null.
+  const runtime = finiteNonNegative(body.runtimeSeconds);
   const title = fileStem(filename).trim() || filename;
   const draft = await createVideo(db, {
     title,
-    runtimeSeconds: normalizeRuntime(body.runtimeSeconds),
+    runtimeSeconds: runtime === null ? null : Math.round(runtime),
   });
 
   const path = objectPath(draft.id, fileExt(filename));
   await updateVideo(db, draft.id, { storagePath: publicUrl(SUPABASE_URL, path) });
 
   return NextResponse.json<UploadResponse>({ videoId: draft.id, path });
-}
-
-// Whole non-negative seconds, or null — matches the row's CHECK constraint.
-function normalizeRuntime(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
-  return Math.round(value);
 }
