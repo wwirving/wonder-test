@@ -24,6 +24,7 @@
   --radius-selector: 4px;
 
   --shadow-project: var(--shadow-project-value);
+  --shadow-border: var(--shadow-border-value); /* shadow-as-border: adapts to any bg */
 
   --default-transition-duration: 200ms;
   --default-transition-timing-function: ease;
@@ -45,6 +46,10 @@
     6.7px 6.7px 5.3px rgba(0, 0, 0, 0.008), 12.5px 12.5px 10px rgba(0, 0, 0, 0.01),
     22.3px 22.3px 17.9px rgba(0, 0, 0, 0.012),
     41.8px 41.8px 33.4px rgba(0, 0, 0, 0.014), 100px 100px 80px rgba(0, 0, 0, 0.02);
+
+  /* shadow-as-border: 1px ring + subtle lift + ambient depth (pure black, no tint) */
+  --shadow-border-value: 0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 1px 2px -1px rgba(0, 0, 0, 0.06), 0 2px 4px 0 rgba(0, 0, 0, 0.04);
 
   /* motion */
   --dur: 0.2s;
@@ -83,6 +88,7 @@
     --muted: #848484;
     --subtle: #a8a8a8;
     --shadow-project-value: 0px 0px 30px rgba(65, 65, 65, 0.1);
+    --shadow-border-value: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 }
 @media (prefers-color-scheme: dark) and (max-width: 767.98px) {
@@ -104,6 +110,7 @@
   --muted: #848484;
   --subtle: #a8a8a8;
   --shadow-project-value: 0px 0px 30px rgba(65, 65, 65, 0.1);
+  --shadow-border-value: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 @media (max-width: 767.98px) {
   .dark {
@@ -204,6 +211,36 @@
 @utility text-medium {
   font-size: var(--size-medium);
   line-height: 1.25;
+}
+
+/* staggered enter: opacity + translateY + blur, one-shot on mount.
+   `both` fill holds the pre-enter state through any animation-delay so nothing
+   flashes in before its turn. Pair with `[animation-delay:*]` to stagger. */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+@utility animate-enter {
+  animation: enter 0.45s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* Respect reduced-motion: collapse all animation/transition to ~instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* soft frosted-glass control fill used by search / tags / cookie bar */

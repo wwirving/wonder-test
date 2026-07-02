@@ -2,30 +2,41 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ALL_TAGS, PROJECTS } from "@/lib/data";
+import { type Video } from "@/lib/db/schema";
 import { SearchFilter } from "@/components/search-filter";
 import { ViewSelector, type ViewMode } from "@/components/view-selector";
-import { ProjectCard } from "@/components/project-card";
+import { VideoCard } from "@/components/video-card";
 
 /**
- * Client container that ties together the search bar, the list/grid toggle,
- * and the project collection — the same three pieces of state the source
- * site coordinates.
+ * Client container for the discover feed: search/tag filter, the list/grid
+ * toggle, and the video collection. Grid is the default (poster-forward);
+ * list is the richer, metadata-heavy alternate.
  */
-export function Gallery() {
-  const [view, setView] = React.useState<ViewMode>("list");
+export function Gallery({ videos }: { videos: Video[] }) {
+  const [view, setView] = React.useState<ViewMode>("grid");
   const [activeTags, setActiveTags] = React.useState<string[]>([]);
 
-  const projects = React.useMemo(() => {
-    if (activeTags.length === 0) return PROJECTS;
-    return PROJECTS.filter((p) =>
-      activeTags.every((t) => p.tags.includes(t))
-    );
-  }, [activeTags]);
+  // Only offer filters that actually appear in the feed (genre + mood).
+  const allTags = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const v of videos) {
+      for (const g of v.genre) set.add(g);
+      for (const m of v.moodTags) set.add(m);
+    }
+    return [...set].sort();
+  }, [videos]);
+
+  const filtered = React.useMemo(() => {
+    if (activeTags.length === 0) return videos;
+    return videos.filter((v) => {
+      const own = new Set([...v.genre, ...v.moodTags, ...v.tags]);
+      return activeTags.every((t) => own.has(t));
+    });
+  }, [videos, activeTags]);
 
   return (
     <>
-      <SearchFilter allTags={ALL_TAGS} active={activeTags} onChange={setActiveTags} />
+      <SearchFilter allTags={allTags} active={activeTags} onChange={setActiveTags} />
 
       <div className="mb-8">
         <ViewSelector view={view} onChange={setView} />
@@ -35,25 +46,25 @@ export function Gallery() {
         className={cn(
           "mx-auto flex w-full px-5",
           view === "grid"
-            ? "max-w-none flex-row flex-wrap items-start gap-5 gap-y-20"
-            : "max-w-[1920px] flex-col items-center justify-start"
+            ? "max-w-none flex-row flex-wrap items-start gap-5 gap-y-14"
+            : "max-w-[1920px] flex-col items-center gap-y-[var(--margin-xl)]",
         )}
       >
-        {projects.map((p) => (
+        {filtered.map((v) => (
           <div
-            key={p.id}
+            key={v.id}
             className={cn(
               view === "grid" &&
-                "w-full sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-0.833rem)]"
+                "w-full sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-0.833rem)]",
             )}
           >
-            <ProjectCard project={p} view={view} />
+            <VideoCard video={v} view={view} />
           </div>
         ))}
 
-        {projects.length === 0 && (
+        {filtered.length === 0 && (
           <p className="w-full py-20 text-center text-small text-muted">
-            No projects match those filters.
+            No videos match those filters.
           </p>
         )}
       </div>

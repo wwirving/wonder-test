@@ -1,11 +1,23 @@
 import { Gallery } from "@/components/gallery";
 import { SiteFooter } from "@/components/site-footer";
+import { Scroller } from "@/components/ui/scroller";
+import { getDiscoverVideos } from "@/lib/mock-videos";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const videos = await getDiscoverVideos();
+
+  // The Scroller owns the viewport scroll (hidden bar + soft edge fade), so the
+  // native page scrollbar never shows. Header/filter/cookie banner are all
+  // fixed, so this h-screen container is body's only in-flow child.
   return (
-    <main className="page-home flex min-h-screen flex-col pt-[var(--margin-main-top)]">
-      <Gallery />
-      <SiteFooter />
-    </main>
+    <Scroller
+      hideScrollbar
+      className="page-home h-screen pt-[var(--margin-main-top)]"
+    >
+      <main className="flex min-h-full flex-col">
+        <Gallery videos={videos} />
+        <SiteFooter />
+      </main>
+    </Scroller>
   );
 }
