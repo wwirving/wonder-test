@@ -72,7 +72,7 @@ export function SearchFilter({
   }
 
   return (
-    <section className="pointer-events-none fixed top-0 left-1/2 z-110 w-72 -translate-x-1/2 pt-5">
+    <section className="pointer-events-none fixed top-0 left-1/2 z-110 w-72 -translate-x-1/2 pt-20 sm:pt-5">
       <div className="pointer-events-auto relative block h-10 w-full text-small">
         <input
           value={query}
