@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   real,
@@ -10,6 +11,9 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+
+/** A single cast/crew credit — role + name (e.g. "Cinematographer" · "…"). */
+export type Credit = { role: string; name: string };
 
 /* ---------- enums ---------- */
 
@@ -33,6 +37,12 @@ export const videos = pgTable(
     title: text("title").notNull(),
     synopsis: text("synopsis"),
     director: text("director"),
+    // Cast & crew, authored by the creator. jsonb array of { role, name } —
+    // richer than a flat text[] because a credit is inherently a pair.
+    credits: jsonb("credits")
+      .$type<Credit[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     genre: text("genre")
       .array()
       .notNull()

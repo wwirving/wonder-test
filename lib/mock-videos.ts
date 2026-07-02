@@ -17,6 +17,7 @@ export const MOCK_VIDEOS: Video[] = [
     synopsis:
       "A sun-bleached elegy for a vanishing south — processions, grief, and gold leaf, shot on 16mm across a single Holy Week.",
     director: "YZA Voku",
+    credits: [],
     genre: ["Drama", "Documentary"],
     moodTags: ["Contemplative", "Devotional", "Sun-drenched"],
     tags: ["16mm", "Spain", "Ritual"],
@@ -35,6 +36,7 @@ export const MOCK_VIDEOS: Video[] = [
     synopsis:
       "Paint meets water in extreme macro. A meditation on colour, surface tension, and the exact moment form becomes feeling.",
     director: "Alex Naghavi",
+    credits: [],
     genre: ["Animation", "Music"],
     moodTags: ["Hypnotic", "Abstract", "Tactile"],
     tags: ["Macro", "Experimental", "Colour"],
@@ -53,6 +55,7 @@ export const MOCK_VIDEOS: Video[] = [
     synopsis:
       "Inspired by Psalm 91 and The Screwtape Letters — a wordless descent and return, staged in body paint and cold northern light.",
     director: "Jordan Daniel Chesney",
+    credits: [],
     genre: ["Drama", "Thriller"],
     moodTags: ["Ominous", "Spiritual", "Stark"],
     tags: ["Portrait", "Allegory"],
@@ -71,6 +74,7 @@ export const MOCK_VIDEOS: Video[] = [
     synopsis:
       "A neon-soaked chase through a city that never resolves. Genre exercise as mood piece — all pursuit, no arrival.",
     director: "Mara Quinn",
+    credits: [],
     genre: ["Thriller", "Sci-Fi"],
     moodTags: ["Neon", "Tense", "Nocturnal"],
     tags: ["Anamorphic", "Night", "Chase"],
@@ -89,6 +93,7 @@ export const MOCK_VIDEOS: Video[] = [
     synopsis:
       "Two strangers share a cable-car cabin for eleven minutes and a lifetime. A comedy about how much can be said in a small box.",
     director: "Idris Bello",
+    credits: [],
     genre: ["Comedy", "Drama"],
     moodTags: ["Warm", "Wry", "Intimate"],
     tags: ["Two-hander", "Dialogue", "Alps"],
@@ -107,6 +112,7 @@ export const MOCK_VIDEOS: Video[] = [
     synopsis:
       "Archival TV signals decay into gardens. A found-footage collage on memory, entropy, and the beauty of a dying broadcast.",
     director: "Petra Volk",
+    credits: [],
     genre: ["Documentary", "Horror"],
     moodTags: ["Nostalgic", "Eerie", "Glitch"],
     tags: ["Found-footage", "Analog", "Collage"],
@@ -131,4 +137,14 @@ export async function getDiscoverVideos(): Promise<Video[]> {
   return MOCK_VIDEOS.filter((v) => v.status === "published").sort(
     (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
   );
+}
+
+/**
+ * A single video by id, for the watch page.
+ *
+ * Mock now — swap to live data with a single line once the DB is seeded:
+ *   return getVideo(db, id);   // lib/services/videos.ts (already tested)
+ */
+export async function getVideoById(id: string): Promise<Video | null> {
+  return MOCK_VIDEOS.find((v) => v.id === id) ?? null;
 }

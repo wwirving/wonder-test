@@ -1,0 +1,1 @@
+ALTER TABLE "videos" ADD COLUMN "credits" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -10,6 +10,7 @@ export type VideoStatus = (typeof videos.status.enumValues)[number];
  */
 export type {
   Clip,
+  Credit,
   NewClip,
   NewVideo,
   NewWatchEvent,
