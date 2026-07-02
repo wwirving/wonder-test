@@ -3,11 +3,13 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight } from "lucide-react";
-import { probeDuration } from "@/lib/media";
+import { capturePoster, probeDuration } from "@/lib/media";
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/ui/file-upload";
 import { FileCard } from "@/components/upload-file-card";
 import { uploadVideo, type UploadHandle } from "@/lib/storage/upload-video";
+import { uploadPosterImage } from "@/lib/storage/upload-image";
+import { setPoster } from "@/app/upload/[id]/actions";
 import {
   ACCEPTED_VIDEO_TYPES,
   MAX_UPLOAD_BYTES,
@@ -72,6 +74,14 @@ export function UploadFlow() {
       });
       if (!res.ok) throw new Error(`Couldn’t start the upload (${res.status}).`);
       const { videoId: id, path } = (await res.json()) as UploadResponse;
+
+      // Grab a poster frame from the file and persist it in the background so a
+      // real thumbnail exists on the editor + discovery feed. Best-effort: any
+      // failure is swallowed — the creator can still pick/upload one later.
+      void capturePoster(picked)
+        .then((blob) => (blob ? uploadPosterImage(id, blob) : null))
+        .then((url) => (url ? setPoster(id, url) : undefined))
+        .catch(() => {});
 
       const handle = uploadVideo(picked, {
         path,

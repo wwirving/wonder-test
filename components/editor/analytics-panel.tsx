@@ -2,6 +2,8 @@
 
 import { BarChart3 } from "lucide-react";
 import { formatDuration } from "@/lib/utils";
+import { formatPct } from "@/lib/format";
+import { Stat } from "@/components/stat-tile";
 import type { VideoAnalytics } from "@/lib/types";
 
 /**
@@ -37,20 +39,18 @@ export function AnalyticsPanel({
     );
   }
 
-  const pct = (x: number) => `${Math.round(x * 100)}%`;
-
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Views" value={analytics.views.toLocaleString("en-US")} />
         <Stat
           label="Avg. watched"
-          value={pct(analytics.meanPctWatched)}
+          value={formatPct(analytics.meanPctWatched)}
           sub="Mean share of the film played"
         />
         <Stat
           label="Completion rate"
-          value={pct(analytics.completionRate)}
+          value={formatPct(analytics.completionRate)}
           sub="Watched 90% or more"
         />
         <Stat
@@ -63,24 +63,6 @@ export function AnalyticsPanel({
         Retention over vanity: watch-through and completion tell you more than
         raw views. A per-moment drop-off curve is the natural next step.
       </p>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div className="rounded-card bg-surface p-4 shadow-border">
-      <p className="text-xsmall text-muted">{label}</p>
-      <p className="mt-1 text-medium tabular-nums text-foreground">{value}</p>
-      {sub ? <p className="mt-0.5 text-xsmall text-muted">{sub}</p> : null}
     </div>
   );
 }

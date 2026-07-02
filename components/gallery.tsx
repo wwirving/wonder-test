@@ -54,8 +54,13 @@ export function Gallery({ videos }: { videos: Video[] }) {
           <div
             key={v.id}
             className={cn(
-              view === "grid" &&
-                "w-full sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-0.833rem)]",
+              // List items must fill a consistent width — without this, the flex
+              // column (items-center, no stretch) collapses each card to its
+              // poster's intrinsic width, so cards vary in size by image. The
+              // card's own max-w-[60rem] mx-auto then centers it.
+              view === "grid"
+                ? "w-full sm:w-[calc(50%-0.625rem)] lg:w-[calc(33.333%-0.833rem)]"
+                : "w-full",
             )}
           >
             <VideoCard video={v} view={view} />

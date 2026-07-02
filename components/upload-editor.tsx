@@ -4,15 +4,17 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, Check } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
+import type { VideoAnalytics } from "@/lib/types";
 import {
   AI_CLIPS_DELAY_MS,
   AI_TAGS_DELAY_MS,
   MOCK_AI_CLIPS,
   MOCK_AI_TAGS,
-  MOCK_ANALYTICS,
   type AiTagSuggestions,
   type SuggestedClip,
 } from "@/lib/mock-editor";
+import { saveVideo, publishVideoAction } from "@/app/upload/[id]/actions";
+import { uploadPosterImage } from "@/lib/storage/upload-image";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DetailsPanel, type DetailsForm } from "@/components/editor/details-panel";
@@ -26,6 +28,9 @@ import { CountBadge, Spinner, type AiStatus } from "@/components/editor/status";
 const TABS = ["details", "autotags", "clips", "analytics"] as const;
 type Tab = (typeof TABS)[number];
 type ApplyField = "synopsis" | "genre" | "moodTags" | "tags";
+type SaveState = "idle" | "saving" | "saved";
+
+const AUTOSAVE_MS = 800;
 
 const has = (arr: string[], v: string) =>
   arr.some((x) => x.toLowerCase() === v.toLowerCase());
@@ -39,15 +44,20 @@ const has = (arr: string[], v: string) =>
  * the **Auto-tags** and **Clips** tabs and is announced by a toast the moment it
  * lands, so it never interrupts typing. Nothing AI gates publishing.
  *
- * MOCK seams (marked): AI arrival is timers standing in for a Supabase Realtime
- * subscription; edits/publish are local state standing in for updateVideo /
- * publishVideo. Component shape is unchanged when those are wired.
+ * Persistence is real: the metadata form autosaves to the `videos` row via a
+ * server action (debounced), Publish flips the row live and revalidates the
+ * discovery feed, and the poster is grabbed/uploaded to Storage. The only mock
+ * left is the Twelve Labs enrichment (tags/clips arrive on timers, standing in
+ * for the webhook → Realtime push).
  */
 export function UploadEditor({
   video,
+  analytics,
   initialTab,
 }: {
   video: Video;
+  /** Engagement roll-up over watch_events; null until published / with no views. */
+  analytics: VideoAnalytics | null;
   /** Deep-link entry (e.g. dashboard → `?tab=analytics`). */
   initialTab?: string;
 }) {
@@ -60,10 +70,12 @@ export function UploadEditor({
     moodTags: video.moodTags,
     tags: video.tags,
   });
+  // The persisted poster (a real Storage URL or null). `posterPreview` is a
+  // transient blob: URL shown for instant feedback while an upload is in flight.
   const [posterUrl, setPosterUrl] = React.useState<string | null>(
     video.posterUrl,
   );
-  const [customPoster, setCustomPoster] = React.useState<string | null>(null);
+  const [posterPreview, setPosterPreview] = React.useState<string | null>(null);
   const [accessTier, setAccessTier] = React.useState(video.accessTier);
 
   const [tab, setTab] = React.useState<Tab>(
@@ -83,7 +95,11 @@ export function UploadEditor({
   );
   const [tagsSeen, setTagsSeen] = React.useState(false);
   const [clipsSeen, setClipsSeen] = React.useState(false);
-  const [published, setPublished] = React.useState(false);
+  const [published, setPublished] = React.useState(
+    video.status === "published",
+  );
+  const [publishing, setPublishing] = React.useState(false);
+  const [saveState, setSaveState] = React.useState<SaveState>("idle");
 
   const [toasts, setToasts] = React.useState<EditorToast[]>([]);
   const toastId = React.useRef(0);
@@ -100,6 +116,33 @@ export function UploadEditor({
     },
     [dismissToast],
   );
+
+  // The exact payload the server persists — form fields plus the two settings
+  // that live in the rail. Memoised so the autosave effect only fires on change.
+  const patch = React.useMemo(
+    () => ({ ...form, posterUrl, accessTier }),
+    [form, posterUrl, accessTier],
+  );
+
+  // Debounced autosave. Skips the initial render (nothing has changed yet) so we
+  // don't write the row straight back on mount.
+  const firstRender = React.useRef(true);
+  React.useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    setSaveState("saving");
+    const timer = setTimeout(async () => {
+      try {
+        await saveVideo(video.id, patch);
+        setSaveState("saved");
+      } catch {
+        setSaveState("idle");
+      }
+    }, AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [patch, video.id]);
 
   // MOCK: stand-in for the Supabase Realtime subscription that flips these
   // statuses when the Twelve Labs webhooks land. Real build: subscribe to the
@@ -150,7 +193,6 @@ export function UploadEditor({
   }, [tab, aiTags, aiClips]);
 
   function updateForm(patch: Partial<DetailsForm>) {
-    // MOCK: real build debounces this into updateVideo(db, id, patch).
     setForm((f) => ({ ...f, ...patch }));
   }
 
@@ -178,17 +220,31 @@ export function UploadEditor({
     }));
   }
 
-  function uploadPoster(file: File) {
-    if (customPoster) URL.revokeObjectURL(customPoster);
-    const url = URL.createObjectURL(file);
-    setCustomPoster(url);
-    setPosterUrl(url);
+  // Poster: show the picked frame instantly (blob URL), upload it to Storage in
+  // the background, then swap to the durable public URL (which autosaves).
+  async function uploadPoster(file: File) {
+    const preview = URL.createObjectURL(file);
+    setPosterPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return preview;
+    });
+    try {
+      const url = await uploadPosterImage(video.id, file);
+      setPosterUrl(url);
+    } catch {
+      pushToast({ message: "Couldn't upload that poster — try again." });
+    } finally {
+      setPosterPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    }
   }
   React.useEffect(() => {
     return () => {
-      if (customPoster) URL.revokeObjectURL(customPoster);
+      if (posterPreview) URL.revokeObjectURL(posterPreview);
     };
-  }, [customPoster]);
+  }, [posterPreview]);
 
   function toggleClip(id: string) {
     setSelectedClips((prev) => {
@@ -204,6 +260,20 @@ export function UploadEditor({
     // and downloads the returned file. Rendering is deferred (see build plan),
     // so here we just acknowledge the export the creator kicked off.
     pushToast({ message: `Preparing "${clip.label}" to download` });
+  }
+
+  async function handlePublish() {
+    setPublishing(true);
+    try {
+      // Persists the current form and flips status → published in one call.
+      await publishVideoAction(video.id, patch);
+      setPublished(true);
+      setSaveState("saved");
+    } catch {
+      pushToast({ message: "Publish failed — please try again." });
+    } finally {
+      setPublishing(false);
+    }
   }
 
   // Count of auto-tag suggestions not yet applied (drives the tab badge).
@@ -222,12 +292,22 @@ export function UploadEditor({
 
   const canPublish = form.title.trim().length > 0;
   const enrichmentPending = aiTags !== "ready" || aiClips !== "ready";
+  const isPublished = published;
+  const displayPoster = posterPreview ?? posterUrl;
 
-  const isPublished = published || video.status === "published";
-  // MOCK: real build fetches getVideoAnalytics(db, id). Null until published.
-  const analytics = isPublished
-    ? { ...MOCK_ANALYTICS, videoId: video.id }
-    : null;
+  // Once published, always show numbers (zeroed until watch_events accrue) even
+  // if the page loaded while still a draft (analytics prop was null then).
+  const displayAnalytics: VideoAnalytics | null = analytics
+    ? { ...analytics, videoId: video.id }
+    : isPublished
+      ? {
+          videoId: video.id,
+          views: 0,
+          meanPctWatched: 0,
+          meanSecondsPlayed: 0,
+          completionRate: 0,
+        }
+      : null;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 pt-32 pb-24">
@@ -255,6 +335,12 @@ export function UploadEditor({
               ) : (
                 "Draft"
               )}
+              {saveState !== "idle" ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{saveState === "saving" ? "Saving…" : "Saved"}</span>
+                </>
+              ) : null}
             </p>
           </div>
         </div>
@@ -275,11 +361,11 @@ export function UploadEditor({
             </div>
           ) : (
             <Button
-              onClick={() => setPublished(true)}
-              disabled={!canPublish}
+              onClick={handlePublish}
+              disabled={!canPublish || publishing}
               title={canPublish ? undefined : "Add a title to publish"}
             >
-              Publish
+              {publishing ? "Publishing…" : "Publish"}
             </Button>
           )}
           {published && enrichmentPending ? (
@@ -296,9 +382,7 @@ export function UploadEditor({
           <PreviewRail
             video={video}
             title={form.title}
-            posterUrl={posterUrl}
-            onSelectPoster={setPosterUrl}
-            customPoster={customPoster}
+            posterUrl={displayPoster}
             onUploadPoster={uploadPoster}
             accessTier={accessTier}
             onAccessTier={setAccessTier}
@@ -361,7 +445,10 @@ export function UploadEditor({
                 />
               </TabsContent>
               <TabsContent value="analytics">
-                <AnalyticsPanel published={isPublished} analytics={analytics} />
+                <AnalyticsPanel
+                  published={isPublished}
+                  analytics={displayAnalytics}
+                />
               </TabsContent>
             </div>
           </Tabs>

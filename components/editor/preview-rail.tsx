@@ -1,34 +1,27 @@
 "use client";
 
 import * as React from "react";
-import { Globe, Lock, Upload } from "lucide-react";
+import { Globe, Image as ImageIcon, Lock, Upload } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
-import { blurImageFor } from "@/lib/avatar";
 import type { Video } from "@/lib/db/schema";
 import { VideoPlayer } from "@/components/video-player";
 import { AiStatusLine, type AiStatus } from "@/components/editor/status";
 
 type AccessTier = Video["accessTier"];
 
-/** Auto-grabbed frame stand-ins (mock). The creator can also upload their own. */
-const POSTER_OPTIONS = [
-  "/video/mock-poster.webp",
-  blurImageFor("frame-a"),
-  blurImageFor("frame-b"),
-];
-
 /**
- * The persistent left rail: the live preview player, poster picker, and the
+ * The persistent left rail: the live preview player, poster, and the
  * publish-adjacent settings (runtime, access tier, AI enrichment status). Stays
  * in view while the creator works the tabs on the right — "preview and publish"
  * is the constant reference, so it never hides behind a tab.
+ *
+ * The poster is auto-grabbed from the film at upload; the creator can replace it
+ * with their own key art. Both are stored in Supabase Storage.
  */
 export function PreviewRail({
   video,
   title,
   posterUrl,
-  onSelectPoster,
-  customPoster,
   onUploadPoster,
   accessTier,
   onAccessTier,
@@ -39,9 +32,6 @@ export function PreviewRail({
   /** Live title from the form, so the preview reflects what's being typed. */
   title: string;
   posterUrl: string | null;
-  onSelectPoster: (url: string) => void;
-  /** A creator-uploaded poster, if any — occupies the last slot when present. */
-  customPoster: string | null;
   onUploadPoster: (file: File) => void;
   accessTier: AccessTier;
   onAccessTier: (tier: AccessTier) => void;
@@ -49,16 +39,10 @@ export function PreviewRail({
   aiClips: AiStatus;
 }) {
   const fileRef = React.useRef<HTMLInputElement>(null);
-  const activePoster = posterUrl ?? POSTER_OPTIONS[0];
 
   // The exact watch-page player, minus fullscreen — a real preview of the film
-  // with the currently-selected poster and title.
-  const previewVideo: Video = {
-    ...video,
-    title,
-    posterUrl: activePoster,
-    storagePath: video.storagePath ?? "/video/mock.mp4",
-  };
+  // with the current poster and title.
+  const previewVideo: Video = { ...video, title, posterUrl };
 
   return (
     <div className="flex flex-col gap-4">
@@ -68,68 +52,34 @@ export function PreviewRail({
         controlsOnHover
       />
 
-      {/* Poster picker */}
+      {/* Poster */}
       <section>
         <div className="flex items-baseline justify-between">
           <h3 className="text-small text-foreground">Poster</h3>
-          <span className="text-xsmall text-muted">Auto-grabbed frames</span>
+          <span className="text-xsmall text-muted">Auto-grabbed from your film</span>
         </div>
-        <div className="mt-2 grid grid-cols-4 gap-1.5">
-          {POSTER_OPTIONS.map((url, i) => {
-            const active = activePoster === url;
-            return (
-              <button
-                key={url + i}
-                type="button"
-                onClick={() => onSelectPoster(url)}
-                aria-label={`Use frame ${i + 1} as poster`}
-                aria-pressed={active}
-                className={cn(
-                  "relative aspect-video overflow-hidden rounded-control outline-offset-2 transition",
-                  active
-                    ? "outline outline-2 outline-foreground"
-                    : "opacity-80 hover:opacity-100",
-                )}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt=""
-                  className={cn(
-                    "absolute inset-0 h-full w-full object-cover",
-                    i > 0 && "scale-125 blur-[3px]",
-                  )}
-                />
-              </button>
-            );
-          })}
-
-          {/* Last slot: the creator's own upload — a poster grab won't always
-              beat a designed key-art frame. */}
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            aria-label={customPoster ? "Replace uploaded poster" : "Upload a poster"}
-            aria-pressed={!!customPoster && activePoster === customPoster}
-            className={cn(
-              "relative flex aspect-video items-center justify-center overflow-hidden rounded-control outline-offset-2 transition",
-              customPoster
-                ? activePoster === customPoster
-                  ? "outline outline-2 outline-foreground"
-                  : "opacity-80 hover:opacity-100"
-                : "border border-dashed border-[var(--input-strong)] text-muted hover:border-muted hover:text-foreground",
-            )}
-          >
-            {customPoster ? (
+        <div className="mt-2 flex items-center gap-3">
+          <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-control bg-input">
+            {posterUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={customPoster}
+                src={posterUrl}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
               />
             ) : (
-              <Upload className="h-4 w-4" strokeWidth={1.5} aria-hidden />
+              <div className="flex h-full w-full items-center justify-center text-muted">
+                <ImageIcon className="h-4 w-4" strokeWidth={1.5} aria-hidden />
+              </div>
             )}
+          </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-control border border-[var(--input-strong)] px-3 py-1.5 text-xsmall text-muted transition hover:border-muted hover:text-foreground"
+          >
+            <Upload className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+            {posterUrl ? "Replace poster" : "Upload poster"}
           </button>
 
           <input

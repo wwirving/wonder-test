@@ -7,6 +7,9 @@ import { WatchMoreRail } from "@/components/watch-more-rail";
 
 type Params = { params: Promise<{ id: string }> };
 
+// Read live: watchable set changes as creators publish.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { id } = await params;
   const video = await getVideoById(id);

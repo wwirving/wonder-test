@@ -15,6 +15,11 @@ export function formatRuntime(seconds: number | null | undefined): string {
   return `${m}:${ss}`;
 }
 
+/** A 0..1 ratio → a whole-number percentage string, e.g. 0.615 → "62%". */
+export function formatPct(ratio: number): string {
+  return `${Math.round(ratio * 100)}%`;
+}
+
 /** Four-digit release year from a Date/ISO string (uses `created_at`). */
 export function formatYear(date: Date | string | null | undefined): string {
   if (!date) return "";

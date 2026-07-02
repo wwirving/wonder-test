@@ -1,0 +1,23 @@
+/**
+ * A single labelled metric tile — the shared unit for both the per-video
+ * analytics panel (`components/editor/analytics-panel.tsx`) and the creator
+ * dashboard overview (`components/dashboard/overview-stats.tsx`). Presentational
+ * only (no hooks), so it renders in server or client components alike.
+ */
+export function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-card bg-surface p-4 shadow-border">
+      <p className="text-xsmall text-muted">{label}</p>
+      <p className="mt-1 text-medium tabular-nums text-foreground">{value}</p>
+      {sub ? <p className="mt-0.5 text-xsmall text-muted">{sub}</p> : null}
+    </div>
+  );
+}

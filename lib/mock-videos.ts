@@ -1,13 +1,14 @@
 import { type Video } from "@/lib/db/schema";
-// import { db } from "@/lib/db/client";
-// import { listVideos } from "@/lib/services/videos";
+import { db } from "@/lib/db/client";
+import { getVideo, listVideos } from "@/lib/services/videos";
 
 /**
- * Placeholder discover feed. These are shaped as real `Video` rows so the UI is
- * wired to the production model — swapping to live data is a one-line change in
- * `getDiscoverVideos()` below.
+ * Seed catalogue for the discover feed. These are shaped as real `Video` rows
+ * and are inserted into the DB by `lib/db/seed.ts` so discovery isn't empty in a
+ * fresh environment. The feed itself now reads live from Postgres (below); this
+ * array is only the seed source of truth.
  *
- * Posters/previews reuse the local demo assets in `public/video/` for now;
+ * Posters/previews reuse the local demo assets in `public/video/`;
  * `storagePath` doubles as the (locally playable) hover-preview source.
  */
 export const MOCK_VIDEOS: Video[] = [
@@ -127,24 +128,12 @@ export const MOCK_VIDEOS: Video[] = [
   },
 ];
 
-/**
- * The discover feed: published videos, newest first.
- *
- * Mock now — swap to live data with a single line once the DB is seeded:
- *   return listVideos(db, { status: "published" });
- */
+/** The discover feed: published videos, newest first — read live from the DB. */
 export async function getDiscoverVideos(): Promise<Video[]> {
-  return MOCK_VIDEOS.filter((v) => v.status === "published").sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-  );
+  return listVideos(db, { status: "published" });
 }
 
-/**
- * A single video by id, for the watch page.
- *
- * Mock now — swap to live data with a single line once the DB is seeded:
- *   return getVideo(db, id);   // lib/services/videos.ts (already tested)
- */
+/** A single video by id, for the watch page — read live from the DB. */
 export async function getVideoById(id: string): Promise<Video | null> {
-  return MOCK_VIDEOS.find((v) => v.id === id) ?? null;
+  return getVideo(db, id);
 }

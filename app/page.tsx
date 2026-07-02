@@ -3,6 +3,9 @@ import { SiteFooter } from "@/components/site-footer";
 import { Scroller } from "@/components/ui/scroller";
 import { getDiscoverVideos } from "@/lib/mock-videos";
 
+// Read live so newly-published films appear without a rebuild.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const videos = await getDiscoverVideos();
 

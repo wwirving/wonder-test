@@ -12,6 +12,7 @@
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
+    "db:seed": "node --env-file=.env.local scripts/seed.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

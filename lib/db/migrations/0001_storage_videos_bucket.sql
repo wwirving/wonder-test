@@ -10,11 +10,14 @@ begin
   end if;
 
   -- file_size_limit mirrors MAX_UPLOAD_BYTES (lib/storage/paths.ts).
+  -- Image types are for the poster grabbed/uploaded alongside each film
+  -- (stored as `{id}/poster.jpg` in the same bucket).
   insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
   values (
     'videos', 'videos', true,
     10737418240, -- 10 GB
-    array['video/mp4', 'video/quicktime', 'video/webm']
+    array['video/mp4', 'video/quicktime', 'video/webm',
+          'image/jpeg', 'image/png', 'image/webp']
   )
   on conflict (id) do update set
     public = excluded.public,
