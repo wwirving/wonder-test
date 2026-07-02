@@ -4,7 +4,7 @@ import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "rafa-style:cookies-dismissed";
+const STORAGE_KEY = "wonder-test:cookies-dismissed";
 
 /** Frosted bottom-right cookie notice (source: `#cookiesWrap .message`). */
 export function CookieBanner() {
