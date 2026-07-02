@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { type Video } from "@/lib/db/schema";
+import type { DiscoverVideo } from "@/lib/mock-videos";
 import { SearchFilter } from "@/components/search-filter";
 import { ViewSelector, type ViewMode } from "@/components/view-selector";
 import { VideoCard } from "@/components/video-card";
@@ -12,7 +12,7 @@ import { VideoCard } from "@/components/video-card";
  * toggle, and the video collection. Grid is the default (poster-forward);
  * list is the richer, metadata-heavy alternate.
  */
-export function Gallery({ videos }: { videos: Video[] }) {
+export function Gallery({ videos }: { videos: DiscoverVideo[] }) {
   const [view, setView] = React.useState<ViewMode>("grid");
   const [activeTags, setActiveTags] = React.useState<string[]>([]);
 
@@ -54,6 +54,9 @@ export function Gallery({ videos }: { videos: Video[] }) {
           <div
             key={v.id}
             className={cn(
+              // Simple opacity fade-up on mount (house `animate-enter`). Cards are
+              // keyed by id, so it fires once per card — not on filter/view toggle.
+              "animate-enter",
               // List items must fill a consistent width — without this, the flex
               // column (items-center, no stretch) collapses each card to its
               // poster's intrinsic width, so cards vary in size by image. The

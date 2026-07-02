@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -11,6 +12,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AiTagSuggestions } from "@/lib/twelve-labs/types";
 
 /** A single cast/crew credit — role + name (e.g. "Cinematographer" · "…"). */
 export type Credit = { role: string; name: string };
@@ -62,6 +64,18 @@ export const videos = pgTable(
     status: videoStatusEnum("status").notNull().default("draft"),
     aiTagsStatus: aiStatusEnum("ai_tags_status").notNull().default("pending"),
     aiClipsStatus: aiStatusEnum("ai_clips_status").notNull().default("pending"),
+    // Twelve Labs handles: the indexing task (polled + used for crash recovery)
+    // and the resolved video id (the retrieval handle for /analyze). Null until
+    // the indexing reconciler kicks the video off (see lib/services/indexing.ts).
+    tlTaskId: text("tl_task_id"),
+    tlVideoId: text("tl_video_id"),
+    // When the current indexing attempt was claimed. Lets the reconciler tell a
+    // genuine crash (stuck minutes with no task id) apart from the normal
+    // sub-second window between claiming and persisting tlTaskId.
+    indexingStartedAt: timestamp("indexing_started_at", { withTimezone: true }),
+    // Persisted /analyze auto-tag payload, so suggestions survive a reload/poll
+    // and the creator can accept them later. Clips persist to the `clips` table.
+    aiSuggestions: jsonb("ai_suggestions").$type<AiTagSuggestions>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -117,6 +131,13 @@ export const clips = pgTable(
     startS: real("start_s").notNull(),
     endS: real("end_s").notNull(),
     label: text("label"),
+    // A still frame grabbed from the clip's start, stored in Storage — the
+    // distinct thumbnail shown at rest (generated client-side once clips land).
+    posterUrl: text("poster_url"),
+    // Whether the creator kept this AI-suggested clip to feature. Auto-clips
+    // start featured (matching the editor's "all selected by default"); the
+    // creator unfeatures the ones they don't want. Drives the discover reel.
+    featured: boolean("featured").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

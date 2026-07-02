@@ -2,7 +2,7 @@
 
 import { Check, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AiTagSuggestions } from "@/lib/mock-editor";
+import type { AiTagSuggestions } from "@/lib/twelve-labs/types";
 import { Spinner, type AiStatus } from "@/components/editor/status";
 
 /**
@@ -11,7 +11,7 @@ import { Spinner, type AiStatus } from "@/components/editor/status";
  * having AI written into their fields. Everything is opt-in and one tap.
  */
 
-type ApplyField = "synopsis" | "genre" | "moodTags" | "tags";
+type ApplyField = "synopsis" | "moodTags" | "tags";
 
 const has = (arr: string[], v: string) =>
   arr.some((x) => x.toLowerCase() === v.toLowerCase());
@@ -25,7 +25,7 @@ export function AutoTagsPanel({
 }: {
   status: AiStatus;
   suggestions: AiTagSuggestions | null;
-  form: { synopsis: string; genre: string[]; moodTags: string[]; tags: string[] };
+  form: { synopsis: string; moodTags: string[]; tags: string[] };
   onApply: (field: ApplyField, value: string) => void;
   onApplyAll: () => void;
 }) {
@@ -56,7 +56,6 @@ export function AutoTagsPanel({
     form.synopsis.trim() === suggestions.synopsis.trim();
   const remaining =
     (synopsisApplied ? 0 : 1) +
-    suggestions.genre.filter((v) => !has(form.genre, v)).length +
     suggestions.moodTags.filter((v) => !has(form.moodTags, v)).length +
     suggestions.tags.filter((v) => !has(form.tags, v)).length;
 
@@ -107,12 +106,6 @@ export function AutoTagsPanel({
         </div>
       </div>
 
-      <ChipGroup
-        label="Genre"
-        values={suggestions.genre}
-        applied={form.genre}
-        onApply={(v) => onApply("genre", v)}
-      />
       <ChipGroup
         label="Mood / Themes"
         values={suggestions.moodTags}

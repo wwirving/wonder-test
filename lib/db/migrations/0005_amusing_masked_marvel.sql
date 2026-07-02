@@ -1,0 +1,1 @@
+ALTER TABLE "clips" ADD COLUMN "featured" boolean DEFAULT true NOT NULL;

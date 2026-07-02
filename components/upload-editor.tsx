@@ -6,16 +6,17 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import type { Video } from "@/lib/db/schema";
 import type { VideoAnalytics } from "@/lib/types";
+import type { AiTagSuggestions, SuggestedClip } from "@/lib/twelve-labs/types";
+import type { EnrichmentState } from "@/lib/services/indexing";
 import {
-  AI_CLIPS_DELAY_MS,
-  AI_TAGS_DELAY_MS,
-  MOCK_AI_CLIPS,
-  MOCK_AI_TAGS,
-  type AiTagSuggestions,
-  type SuggestedClip,
-} from "@/lib/mock-editor";
-import { saveVideo, publishVideoAction } from "@/app/upload/[id]/actions";
-import { uploadPosterImage } from "@/lib/storage/upload-image";
+  saveVideo,
+  publishVideoAction,
+  pollIndexing,
+  setClipFeaturedAction,
+  setClipPosterAction,
+} from "@/app/upload/[id]/actions";
+import { captureFrameFromUrl } from "@/lib/media";
+import { uploadClipPoster, uploadPosterImage } from "@/lib/storage/upload-image";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DetailsPanel, type DetailsForm } from "@/components/editor/details-panel";
@@ -28,10 +29,13 @@ import { CountBadge, Spinner, type AiStatus } from "@/components/editor/status";
 
 const TABS = ["details", "autotags", "clips", "analytics"] as const;
 type Tab = (typeof TABS)[number];
-type ApplyField = "synopsis" | "genre" | "moodTags" | "tags";
+type ApplyField = "synopsis" | "moodTags" | "tags";
 type SaveState = "idle" | "saving" | "saved";
 
 const AUTOSAVE_MS = 800;
+const POLL_MS = 5000;
+
+const isTerminal = (s: AiStatus) => s === "ready" || s === "failed";
 
 const has = (arr: string[], v: string) =>
   arr.some((x) => x.toLowerCase() === v.toLowerCase());
@@ -54,11 +58,14 @@ const has = (arr: string[], v: string) =>
 export function UploadEditor({
   video,
   analytics,
+  enrichment,
   initialTab,
 }: {
   video: Video;
   /** Engagement roll-up over watch_events; null until published / with no views. */
   analytics: VideoAnalytics | null;
+  /** Twelve Labs enrichment already landed at load (statuses, tags, clips). */
+  enrichment: EnrichmentState | null;
   /** Deep-link entry (e.g. dashboard → `?tab=analytics`). */
   initialTab?: string;
 }) {
@@ -85,14 +92,20 @@ export function UploadEditor({
       : "details",
   );
 
-  const [aiTags, setAiTags] = React.useState<AiStatus>(video.aiTagsStatus);
-  const [aiClips, setAiClips] = React.useState<AiStatus>(video.aiClipsStatus);
-  const [tagPayload, setTagPayload] = React.useState<AiTagSuggestions | null>(
-    null,
+  const [aiTags, setAiTags] = React.useState<AiStatus>(
+    enrichment?.aiTagsStatus ?? video.aiTagsStatus,
   );
-  const [clips, setClips] = React.useState<SuggestedClip[]>([]);
+  const [aiClips, setAiClips] = React.useState<AiStatus>(
+    enrichment?.aiClipsStatus ?? video.aiClipsStatus,
+  );
+  const [tagPayload, setTagPayload] = React.useState<AiTagSuggestions | null>(
+    enrichment?.suggestions ?? null,
+  );
+  const [clips, setClips] = React.useState<SuggestedClip[]>(
+    enrichment?.clips ?? [],
+  );
   const [selectedClips, setSelectedClips] = React.useState<Set<string>>(
-    new Set(),
+    new Set(enrichment?.featuredClipIds ?? []),
   );
   const [tagsSeen, setTagsSeen] = React.useState(false);
   const [clipsSeen, setClipsSeen] = React.useState(false);
@@ -148,45 +161,66 @@ export function UploadEditor({
     return () => clearTimeout(timer);
   }, [patch, video.id]);
 
-  // MOCK: stand-in for the Supabase Realtime subscription that flips these
-  // statuses when the Twelve Labs webhooks land. Real build: subscribe to the
-  // row and setState from the payload; drop the timers.
+  // Poll Twelve Labs enrichment until both surfaces reach a terminal state, then
+  // stop. Each tick self-heals (starts indexing if it somehow never began),
+  // advances the task server-side, and reveals suggestions/clips as they land —
+  // announcing each with a toast on the transition into "ready". Refs hold the
+  // latest statuses so the once-mounted loop never reads a stale closure.
+  const aiTagsRef = React.useRef(aiTags);
+  const aiClipsRef = React.useRef(aiClips);
   React.useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    if (aiTags !== "ready") {
-      timers.push(
-        setTimeout(() => {
-          const n =
-            1 +
-            MOCK_AI_TAGS.genre.length +
-            MOCK_AI_TAGS.moodTags.length +
-            MOCK_AI_TAGS.tags.length;
-          setTagPayload(MOCK_AI_TAGS);
-          setAiTags("ready");
-          pushToast({
-            message: `Auto-tags ready · ${n} suggestions`,
-            actionLabel: "Review",
-            onAction: () => setTab("autotags"),
-          });
-        }, AI_TAGS_DELAY_MS),
-      );
-    }
-    if (aiClips !== "ready") {
-      timers.push(
-        setTimeout(() => {
-          setClips(MOCK_AI_CLIPS);
-          setSelectedClips(new Set(MOCK_AI_CLIPS.map((c) => c.id)));
-          setAiClips("ready");
-          pushToast({
-            message: `${MOCK_AI_CLIPS.length} clips found`,
-            actionLabel: "Review",
-            onAction: () => setTab("clips"),
-          });
-        }, AI_CLIPS_DELAY_MS),
-      );
-    }
-    return () => timers.forEach(clearTimeout);
-    // Run once — the timers model a one-shot async arrival.
+    if (isTerminal(aiTagsRef.current) && isTerminal(aiClipsRef.current)) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = async () => {
+      let state: EnrichmentState | null = null;
+      try {
+        state = await pollIndexing(video.id);
+      } catch {
+        // Transient (network / cold serverless) — try again next tick.
+      }
+      if (cancelled) return;
+      if (state) {
+        if (state.aiTagsStatus === "ready" && aiTagsRef.current !== "ready") {
+          setTagPayload(state.suggestions);
+          if (state.suggestions) {
+            const s = state.suggestions;
+            const n = 1 + s.moodTags.length + s.tags.length;
+            pushToast({
+              message: `Auto-tags ready · ${n} suggestions`,
+              actionLabel: "Review",
+              onAction: () => setTab("autotags"),
+            });
+          }
+        }
+        if (state.aiClipsStatus === "ready" && aiClipsRef.current !== "ready") {
+          setClips(state.clips);
+          setSelectedClips(new Set(state.featuredClipIds));
+          if (state.clips.length > 0) {
+            pushToast({
+              message: `${state.clips.length} clips found`,
+              actionLabel: "Review",
+              onAction: () => setTab("clips"),
+            });
+          }
+        }
+        aiTagsRef.current = state.aiTagsStatus;
+        aiClipsRef.current = state.aiClipsStatus;
+        setAiTags(state.aiTagsStatus);
+        setAiClips(state.aiClipsStatus);
+        if (isTerminal(state.aiTagsStatus) && isTerminal(state.aiClipsStatus)) {
+          return; // both done — stop polling
+        }
+      }
+      timer = setTimeout(tick, POLL_MS);
+    };
+
+    timer = setTimeout(tick, 0); // fire immediately, then every POLL_MS
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -195,6 +229,43 @@ export function UploadEditor({
     if (tab === "autotags" && aiTags === "ready") setTagsSeen(true);
     if (tab === "clips" && aiClips === "ready") setClipsSeen(true);
   }, [tab, aiTags, aiClips]);
+
+  // Give each clip its own still thumbnail: once clips land, grab the frame at
+  // each clip's start from the source (CORS-readable), upload it, and persist —
+  // so the list and the discover reel show distinct frames, not one shared
+  // poster. Runs once per clip set (keyed on ids, not the objects we mutate) and
+  // is fully best-effort: any failure just falls back to the film poster.
+  const clipsRef = React.useRef(clips);
+  clipsRef.current = clips;
+  const clipIdsKey = clips.map((c) => c.id).join(",");
+  React.useEffect(() => {
+    const src = video.storagePath;
+    if (!src) return;
+    let cancelled = false;
+    (async () => {
+      for (const { id } of clipsRef.current) {
+        if (cancelled) return;
+        const cur = clipsRef.current.find((c) => c.id === id);
+        if (!cur || cur.posterUrl) continue; // already has a still
+        const blob = await captureFrameFromUrl(src, cur.startS);
+        if (cancelled || !blob) continue;
+        try {
+          const url = await uploadClipPoster(video.id, id, blob);
+          if (cancelled) return;
+          await setClipPosterAction(id, url);
+          setClips((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, posterUrl: url } : c)),
+          );
+        } catch {
+          /* best-effort — fall back to the film poster */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipIdsKey, video.storagePath, video.id]);
 
   function updateForm(patch: Partial<DetailsForm>) {
     setForm((f) => ({ ...f, ...patch }));
@@ -215,7 +286,6 @@ export function UploadEditor({
     setForm((f) => ({
       ...f,
       synopsis: f.synopsis.trim() ? f.synopsis : tagPayload.synopsis,
-      genre: [...f.genre, ...tagPayload.genre.filter((v) => !has(f.genre, v))],
       moodTags: [
         ...f.moodTags,
         ...tagPayload.moodTags.filter((v) => !has(f.moodTags, v)),
@@ -250,20 +320,25 @@ export function UploadEditor({
     };
   }, [posterPreview]);
 
+  // Toggle whether a clip is featured — optimistic, then persisted so the
+  // discover feed reflects it. On failure we roll the local state back.
   function toggleClip(id: string) {
+    const willFeature = !selectedClips.has(id);
     setSelectedClips((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (willFeature) next.add(id);
+      else next.delete(id);
       return next;
     });
-  }
-
-  function downloadClip(clip: SuggestedClip) {
-    // MOCK: production POSTs to a clip-export job (trim start-end, re-encode)
-    // and downloads the returned file. Rendering is deferred (see build plan),
-    // so here we just acknowledge the export the creator kicked off.
-    pushToast({ message: `Preparing "${clip.label}" to download` });
+    setClipFeaturedAction(id, willFeature).catch(() => {
+      setSelectedClips((prev) => {
+        const next = new Set(prev);
+        if (willFeature) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      pushToast({ message: "Couldn't save that change — try again." });
+    });
   }
 
   async function handlePublish() {
@@ -305,7 +380,6 @@ export function UploadEditor({
       form.synopsis.trim() === tagPayload.synopsis.trim();
     return (
       (synopsisApplied ? 0 : 1) +
-      tagPayload.genre.filter((v) => !has(form.genre, v)).length +
       tagPayload.moodTags.filter((v) => !has(form.moodTags, v)).length +
       tagPayload.tags.filter((v) => !has(form.tags, v)).length
     );
@@ -462,9 +536,10 @@ export function UploadEditor({
                 <ClipsPanel
                   status={aiClips}
                   clips={clips}
+                  videoSrc={video.storagePath}
+                  posterUrl={displayPoster}
                   selected={selectedClips}
                   onToggle={toggleClip}
-                  onDownload={downloadClip}
                 />
               </TabsContent>
               <TabsContent value="analytics">

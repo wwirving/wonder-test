@@ -45,6 +45,23 @@ describe("getVideoAnalytics", () => {
     expect(a.completionRate).toBeCloseTo(2 / 3, 5);
   });
 
+  it("rolls up multiple progress pings per session to one view", async () => {
+    const v = await createVideo(db, { title: "A", genre: ["Drama"] });
+    // Two sessions, each emitting several throttled pings as playback advances.
+    // s1 reaches 95% (completes); s2 bails at 40%.
+    for (const pct of [10, 30, 60, 95]) await watch(v.id, "s1", pct);
+    for (const pct of [10, 25, 40]) await watch(v.id, "s2", pct);
+
+    const a = await getVideoAnalytics(db, v.id);
+    // 2 sessions, not 7 ping rows
+    expect(a.views).toBe(2);
+    // per-session furthest point: 95% and 40% → mean 0.675
+    expect(a.meanPctWatched).toBeCloseTo((0.95 + 0.4) / 2, 5);
+    expect(a.meanSecondsPlayed).toBeCloseTo((95 + 40) / 2, 5);
+    // 1 of 2 sessions cleared 90% — not 1 of 7 pings
+    expect(a.completionRate).toBeCloseTo(0.5, 5);
+  });
+
   it("returns zeroed metrics for a video with no watches", async () => {
     const v = await createVideo(db, { title: "B", genre: ["Drama"] });
     const a = await getVideoAnalytics(db, v.id);

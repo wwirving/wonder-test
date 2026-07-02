@@ -71,8 +71,9 @@ export async function deleteVideo(db: Database, id: string): Promise<boolean> {
 }
 
 /**
- * Twelve Labs webhook target — flips an AI processing status. Idempotent
- * single-column update, safe against duplicate webhook deliveries.
+ * Twelve Labs indexing-reconciler target — flips an AI processing status.
+ * Idempotent single-column update, safe against overlapping reconcile passes
+ * (see lib/services/indexing.ts).
  */
 export async function setAiStatus(
   db: Database,

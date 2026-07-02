@@ -1,31 +1,39 @@
 "use client";
 
-import { AlertCircle, Check, Clapperboard, Download, Scissors } from "lucide-react";
+import * as React from "react";
+import { AlertCircle, Check, Clapperboard, Download, Play, Scissors } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
-import { blurImageFor } from "@/lib/avatar";
-import type { SuggestedClip } from "@/lib/mock-editor";
-import type { AiStatus } from "@/components/editor/status";
+import { useSegmentCycle, useVideoBuffering } from "@/lib/use-segment-cycle";
+import type { SuggestedClip } from "@/lib/twelve-labs/types";
+import { Spinner, type AiStatus } from "@/components/editor/status";
 
 /**
- * Twelve Labs auto-clips / highlights, revealed async. The creator selects which
- * moments to feature (later surfaced as in-player highlights) and can download
- * any clip to post on socials. Rendering the actual clip files is deferred, so
- * this picks segments and hands the export off to `onDownload`.
- * Handles every lifecycle state so a slow or failed index never blocks the page.
+ * Twelve Labs auto-clips / highlights, revealed async. Each clip previews the
+ * real segment (played off the source video — no rendering), and the creator
+ * features the moments they want, which the discover feed then cycles through.
+ * Downloading a trimmed file is deferred (see "with more time"), so its button
+ * is a disabled affordance. Handles every lifecycle state so a slow or failed
+ * index never blocks the page.
  */
 export function ClipsPanel({
   status,
   clips,
+  videoSrc,
+  posterUrl,
   selected,
   onToggle,
-  onDownload,
 }: {
   status: AiStatus;
   clips: SuggestedClip[];
+  /** Source video URL the segment previews play from. */
+  videoSrc: string | null;
+  /** Poster shown as the instant resting thumbnail (avoids a black frame). */
+  posterUrl: string | null;
   selected: Set<string>;
   onToggle: (id: string) => void;
-  onDownload: (clip: SuggestedClip) => void;
 }) {
+  // One clip previews at a time — clicking a thumbnail plays that segment loop.
+  const [playingId, setPlayingId] = React.useState<string | null>(null);
   if (status === "pending" || status === "processing") {
     return <ClipsSkeleton />;
   }
@@ -68,26 +76,25 @@ export function ClipsPanel({
                 isOn ? "bg-hover" : "hover:bg-hover",
               )}
             >
-              {/* Main area toggles whether the clip is featured. */}
+              {/* Real segment preview — click to play this clip's range on loop. */}
+              <ClipPreview
+                src={videoSrc}
+                posterUrl={posterUrl}
+                clip={clip}
+                playing={playingId === clip.id}
+                onToggle={() =>
+                  setPlayingId((id) => (id === clip.id ? null : clip.id))
+                }
+              />
+
+              {/* Label toggles whether the clip is featured. */}
               <button
                 type="button"
                 onClick={() => onToggle(clip.id)}
                 aria-pressed={isOn}
                 aria-label={`${isOn ? "Unfeature" : "Feature"} ${clip.label}`}
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                className="flex min-w-0 flex-1 items-center text-left"
               >
-                <span className="relative aspect-video h-14 shrink-0 overflow-hidden rounded-control outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={blurImageFor(clip.label)}
-                    alt=""
-                    className="absolute inset-0 h-full w-full scale-125 object-cover blur-[3px]"
-                  />
-                  <span className="absolute right-1 bottom-1 rounded-[2px] bg-overlay px-1 text-[10px] leading-tight text-background tabular-nums">
-                    {formatDuration(clip.endS - clip.startS)}
-                  </span>
-                </span>
-
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-small text-foreground">
                     {clip.label}
@@ -98,13 +105,13 @@ export function ClipsPanel({
                 </span>
               </button>
 
-              {/* Download the clip for socials (export handled by parent). */}
+              {/* Clip export is deferred — see "with more time". */}
               <button
                 type="button"
-                onClick={() => onDownload(clip)}
-                aria-label={`Download ${clip.label}`}
-                title="Download clip"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-muted transition hover:bg-input hover:text-foreground"
+                disabled
+                aria-label="Download clip (coming soon)"
+                title="Clip export — coming soon"
+                className="flex h-8 w-8 shrink-0 cursor-not-allowed items-center justify-center rounded-control text-muted/40"
               >
                 <Download className="h-4 w-4" strokeWidth={1.5} aria-hidden />
               </button>
@@ -132,6 +139,75 @@ export function ClipsPanel({
         })}
       </ul>
     </div>
+  );
+}
+
+/**
+ * A single clip's preview thumbnail. At rest it shows the video's poster (an
+ * image we already have — instant, no per-clip video load, no black frame).
+ * Clicking mounts a `<video>` that plays the start→end segment on loop off the
+ * source (no rendered file); the poster covers any buffering. Only the clicked
+ * clip ever loads video bytes, so the list stays cheap no matter how many clips.
+ */
+function ClipPreview({
+  src,
+  posterUrl,
+  clip,
+  playing,
+  onToggle,
+}: {
+  src: string | null;
+  posterUrl: string | null;
+  clip: SuggestedClip;
+  playing: boolean;
+  onToggle: () => void;
+}) {
+  const ref = React.useRef<HTMLVideoElement>(null);
+  useSegmentCycle(ref, playing ? [clip] : [], playing);
+  const buffering = useVideoBuffering(ref, playing);
+
+  // The clip's own still frame if we've generated one, else the film poster.
+  const still = clip.posterUrl ?? posterUrl;
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={`${playing ? "Pause" : "Play"} ${clip.label}`}
+      className="group/clip relative aspect-video h-14 shrink-0 overflow-hidden rounded-control bg-input outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+    >
+      {playing && src ? (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <video
+          ref={ref}
+          src={src}
+          poster={still ?? undefined}
+          muted
+          playsInline
+          preload="auto"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : still ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={still}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : null}
+      {playing && buffering ? (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <Spinner className="h-4 w-4 text-white" />
+        </span>
+      ) : !playing ? (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover/clip:opacity-100">
+          <Play className="h-4 w-4 text-white" strokeWidth={2} aria-hidden />
+        </span>
+      ) : null}
+      <span className="absolute right-1 bottom-1 rounded-[2px] bg-overlay px-1 text-[10px] leading-tight text-background tabular-nums">
+        {formatDuration(clip.endS - clip.startS)}
+      </span>
+    </button>
   );
 }
 

@@ -74,3 +74,56 @@ export function capturePoster(
     video.src = url;
   });
 }
+
+/**
+ * Grab a single frame at `timeS` from a remote video URL (e.g. a Storage
+ * source) via a throwaway <video> + <canvas>. Requires the source to be
+ * CORS-readable (`crossOrigin="anonymous"`) or the canvas taints and capture
+ * fails — Supabase public objects send `Access-Control-Allow-Origin: *`, so this
+ * works. Best-effort: resolves null on any error/timeout so callers can fall
+ * back to the film poster. Used to give each clip its own still thumbnail.
+ */
+export function captureFrameFromUrl(
+  url: string,
+  timeS: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+
+    let settled = false;
+    const finish = (value: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    video.onloadedmetadata = () => {
+      const d = video.duration;
+      video.currentTime =
+        Number.isFinite(d) && d > 0 ? Math.min(Math.max(timeS, 0), d - 0.05) : timeS;
+    };
+    video.onseeked = () => {
+      try {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) return finish(null);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return finish(null);
+        ctx.drawImage(video, 0, 0, w, h);
+        canvas.toBlob((blob) => finish(blob), "image/jpeg", 0.75);
+      } catch {
+        finish(null);
+      }
+    };
+    video.onerror = () => finish(null);
+    setTimeout(() => finish(null), 10000);
+    video.src = url;
+  });
+}

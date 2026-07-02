@@ -18,17 +18,31 @@ export async function getVideoAnalytics(
   db: Database,
   videoId: string,
 ): Promise<VideoAnalytics> {
-  const [row] = await db
+  // A viewing session emits many throttled progress pings (one watch_events row
+  // each). Roll those up to one row per session — furthest point reached — first,
+  // so "views" counts sessions and completion is measured per session, not per ping.
+  const sessions = db
     .select({
-      views: count(),
-      meanPctWatched: avg(watchEvents.pctWatched).mapWith(Number),
-      meanSecondsPlayed: avg(watchEvents.watchedSeconds).mapWith(Number),
-      completed: sql<number>`count(*) filter (where ${watchEvents.pctWatched} >= ${COMPLETION_THRESHOLD})`.mapWith(
-        Number,
+      maxPct: sql<number>`max(${watchEvents.pctWatched})`.as("max_pct"),
+      maxSeconds: sql<number>`max(${watchEvents.watchedSeconds})`.as(
+        "max_seconds",
       ),
     })
     .from(watchEvents)
-    .where(eq(watchEvents.videoId, videoId));
+    .where(eq(watchEvents.videoId, videoId))
+    .groupBy(watchEvents.sessionId)
+    .as("sessions");
+
+  const [row] = await db
+    .select({
+      views: count(),
+      meanPctWatched: avg(sessions.maxPct).mapWith(Number),
+      meanSecondsPlayed: avg(sessions.maxSeconds).mapWith(Number),
+      completed: sql<number>`count(*) filter (where ${sessions.maxPct} >= ${COMPLETION_THRESHOLD})`.mapWith(
+        Number,
+      ),
+    })
+    .from(sessions);
 
   const views = Number(row?.views ?? 0);
   return {
@@ -47,20 +61,36 @@ export async function getVideoAnalytics(
 export async function getCreatorDashboard(
   db: Database,
 ): Promise<CreatorDashboard> {
+  // Collapse the per-ping watch_events to one row per (video, session) — the
+  // furthest point that session reached — so the roll-up below counts sessions,
+  // not throttled progress pings.
+  const sessions = db
+    .select({
+      videoId: watchEvents.videoId,
+      sessionId: watchEvents.sessionId,
+      maxPct: sql<number>`max(${watchEvents.pctWatched})`.as("max_pct"),
+      maxSeconds: sql<number>`max(${watchEvents.watchedSeconds})`.as(
+        "max_seconds",
+      ),
+    })
+    .from(watchEvents)
+    .groupBy(watchEvents.videoId, watchEvents.sessionId)
+    .as("sessions");
+
   const perVideoRaw = await db
     .select({
       videoId: videos.id,
       title: videos.title,
       status: videos.status,
-      views: count(watchEvents.id).mapWith(Number),
-      meanPctWatched: avg(watchEvents.pctWatched).mapWith(Number),
-      meanSecondsPlayed: avg(watchEvents.watchedSeconds).mapWith(Number),
-      completed: sql<number>`count(*) filter (where ${watchEvents.pctWatched} >= ${COMPLETION_THRESHOLD})`.mapWith(
+      views: count(sessions.sessionId).mapWith(Number),
+      meanPctWatched: avg(sessions.maxPct).mapWith(Number),
+      meanSecondsPlayed: avg(sessions.maxSeconds).mapWith(Number),
+      completed: sql<number>`count(*) filter (where ${sessions.maxPct} >= ${COMPLETION_THRESHOLD})`.mapWith(
         Number,
       ),
     })
     .from(videos)
-    .leftJoin(watchEvents, eq(watchEvents.videoId, videos.id))
+    .leftJoin(sessions, eq(sessions.videoId, videos.id))
     .groupBy(videos.id)
     .orderBy(videos.createdAt);
 
@@ -75,9 +105,9 @@ export async function getCreatorDashboard(
   }));
 
   // Catalogue totals. Views-weighted retention/completion are exact global
-  // means, not an average-of-averages: each video's views == its watch_event
-  // count, so Σ(meanPct·views) recovers the sum of pct across every event and
-  // Σ(completed) the total completed watches. One pass, no extra query.
+  // means, not an average-of-averages: each video's views == its session count,
+  // so Σ(meanPct·views) recovers the sum of per-session pct across every session
+  // and Σ(completed) the total completed sessions. One pass, no extra query.
   const agg = perVideoRaw.reduce(
     (acc, r) => ({
       videos: acc.videos + 1,

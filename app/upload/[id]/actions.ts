@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { publishVideo, updateVideo } from "@/lib/services/videos";
+import { setClipFeatured, setClipPoster } from "@/lib/services/clips";
+import {
+  ensureIndexing,
+  getEnrichmentState,
+  reconcileIndexing,
+  type EnrichmentState,
+} from "@/lib/services/indexing";
 import type { Credit, Video } from "@/lib/db/schema";
 
 /**
@@ -66,4 +73,44 @@ export async function publishVideoAction(
 /** Lightweight poster persistence — used after a client-side frame grab/upload. */
 export async function setPoster(id: string, posterUrl: string): Promise<void> {
   await updateVideo(db, id, { posterUrl });
+}
+
+/**
+ * Persist whether a clip is featured. Called optimistically as the creator
+ * toggles clips in the editor; the discover feed reads the featured set.
+ */
+export async function setClipFeaturedAction(
+  clipId: string,
+  featured: boolean,
+): Promise<void> {
+  await setClipFeatured(db, clipId, featured);
+}
+
+/** Persist a clip's generated still-frame thumbnail (captured in the browser). */
+export async function setClipPosterAction(
+  clipId: string,
+  posterUrl: string,
+): Promise<void> {
+  await setClipPoster(db, clipId, posterUrl);
+}
+
+/**
+ * Fire Twelve Labs indexing the moment the upload finishes (called from the
+ * upload flow before the creator even reaches the editor). Idempotent — the
+ * reconciler no-ops if indexing has already started.
+ */
+export async function startIndexing(id: string): Promise<void> {
+  await ensureIndexing(db, id);
+}
+
+/**
+ * The editor's polling heartbeat. Self-heals (starts indexing if it somehow
+ * never began), advances the running task, and returns the current enrichment
+ * state so the client can reveal suggestions/clips as they land. Replaces the
+ * old mock timers.
+ */
+export async function pollIndexing(id: string): Promise<EnrichmentState | null> {
+  await ensureIndexing(db, id);
+  await reconcileIndexing(db, id);
+  return getEnrichmentState(db, id);
 }

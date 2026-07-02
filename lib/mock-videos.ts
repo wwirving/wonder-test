@@ -1,6 +1,11 @@
 import { type Video } from "@/lib/db/schema";
 import { db } from "@/lib/db/client";
 import { getVideo, listVideos } from "@/lib/services/videos";
+import { listFeaturedClipsForVideos } from "@/lib/services/clips";
+import type { SuggestedClip } from "@/lib/twelve-labs/types";
+
+/** A discover-feed video plus the clip segments its card cycles through on hover. */
+export type DiscoverVideo = Video & { clips: SuggestedClip[] };
 
 /**
  * Seed catalogue for the discover feed. These are shaped as real `Video` rows
@@ -11,7 +16,12 @@ import { getVideo, listVideos } from "@/lib/services/videos";
  * Posters/previews reuse the local demo assets in `public/video/`;
  * `storagePath` doubles as the (locally playable) hover-preview source.
  */
-export const MOCK_VIDEOS: Video[] = [
+// Base fixtures omit the Twelve Labs columns; they're filled with nulls below so
+// each new TL field only needs a default in one place, not on every row.
+const BASE_VIDEOS: Omit<
+  Video,
+  "tlTaskId" | "tlVideoId" | "aiSuggestions" | "indexingStartedAt"
+>[] = [
   {
     id: "00000000-0000-0000-0000-000000000001",
     title: "Andalucía",
@@ -128,9 +138,35 @@ export const MOCK_VIDEOS: Video[] = [
   },
 ];
 
-/** The discover feed: published videos, newest first — read live from the DB. */
-export async function getDiscoverVideos(): Promise<Video[]> {
-  return listVideos(db, { status: "published" });
+export const MOCK_VIDEOS: Video[] = BASE_VIDEOS.map((v) => ({
+  ...v,
+  tlTaskId: null,
+  tlVideoId: null,
+  aiSuggestions: null,
+  indexingStartedAt: null,
+}));
+
+/**
+ * The discover feed: published videos, newest first — read live from the DB,
+ * each with its featured clip segments (one batched query, no N+1) so cards can
+ * cycle them on hover.
+ */
+export async function getDiscoverVideos(): Promise<DiscoverVideo[]> {
+  const published = await listVideos(db, { status: "published" });
+  const clipsByVideo = await listFeaturedClipsForVideos(
+    db,
+    published.map((v) => v.id),
+  );
+  return published.map((v) => ({
+    ...v,
+    clips: (clipsByVideo.get(v.id) ?? []).map((c) => ({
+      id: c.id,
+      startS: c.startS,
+      endS: c.endS,
+      label: c.label ?? "",
+      posterUrl: c.posterUrl,
+    })),
+  }));
 }
 
 /** A single video by id, for the watch page — read live from the DB. */

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { getVideo } from "@/lib/services/videos";
+import { ensureIndexing, getEnrichmentState } from "@/lib/services/indexing";
 import { getVideoAnalytics } from "@/lib/services/analytics";
 import { UploadEditor } from "@/components/upload-editor";
 
@@ -34,10 +35,26 @@ export default async function UploadEditorPage({
   const video = await getVideo(db, id);
   if (!video) notFound();
 
+  // Self-heal: if the upload-time kickoff never ran (or the creator deep-linked
+  // here), make sure indexing is under way. Fast — it just claims + hands TL a
+  // URL; the client poll drives the slower completion, so load never blocks on
+  // analysis.
+  await ensureIndexing(db, id);
+
+  // Hydrate the enrichment surfaces from whatever has already landed.
+  const enrichment = await getEnrichmentState(db, id);
+
   // Engagement roll-up over watch_events — only meaningful once published, but
   // cheap to fetch and lets the Analytics tab render real numbers on load.
   const analytics =
     video.status === "published" ? await getVideoAnalytics(db, id) : null;
 
-  return <UploadEditor video={video} analytics={analytics} initialTab={tab} />;
+  return (
+    <UploadEditor
+      video={video}
+      analytics={analytics}
+      enrichment={enrichment}
+      initialTab={tab}
+    />
+  );
 }

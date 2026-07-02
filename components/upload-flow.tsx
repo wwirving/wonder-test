@@ -9,7 +9,7 @@ import { FileUpload } from "@/components/ui/file-upload";
 import { FileCard } from "@/components/upload-file-card";
 import { uploadVideo, type UploadHandle } from "@/lib/storage/upload-video";
 import { uploadPosterImage } from "@/lib/storage/upload-image";
-import { setPoster } from "@/app/upload/[id]/actions";
+import { setPoster, startIndexing } from "@/app/upload/[id]/actions";
 import {
   ACCEPTED_VIDEO_TYPES,
   MAX_UPLOAD_BYTES,
@@ -91,6 +91,12 @@ export function UploadFlow() {
       upload.current = handle;
       await handle.done;
       upload.current = null;
+
+      // Bytes are now in the public bucket — kick off Twelve Labs indexing right
+      // away so enrichment is already running before the creator opens the
+      // editor. Best-effort: the editor's poll (and page load) will start it if
+      // this misses. Never block the hand-off on it.
+      void startIndexing(id).catch(() => {});
 
       setProgress(100);
       setVideoId(id);

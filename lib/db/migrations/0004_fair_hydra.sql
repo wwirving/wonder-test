@@ -1,0 +1,1 @@
+ALTER TABLE "videos" ADD COLUMN "indexing_started_at" timestamp with time zone;

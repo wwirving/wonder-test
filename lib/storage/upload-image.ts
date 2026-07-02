@@ -19,7 +19,23 @@ export async function uploadPosterImage(
     throw new Error("Supabase env not configured for uploads");
   }
 
-  const path = `${videoId}/poster.jpg`;
+  return uploadImage(`${videoId}/poster.jpg`, blob);
+}
+
+/** Upload a generated still frame for a clip → `{videoId}/clips/{clipId}.jpg`. */
+export async function uploadClipPoster(
+  videoId: string,
+  clipId: string,
+  blob: Blob,
+): Promise<string> {
+  return uploadImage(`${videoId}/clips/${clipId}.jpg`, blob);
+}
+
+/** Shared one-shot image upload to Storage; returns a cache-busted public URL. */
+async function uploadImage(path: string, blob: Blob): Promise<string> {
+  if (!SUPABASE_URL || !PUBLISHABLE_KEY) {
+    throw new Error("Supabase env not configured for uploads");
+  }
   const res = await fetch(
     `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`,
     {
@@ -34,10 +50,9 @@ export async function uploadPosterImage(
     },
   );
   if (!res.ok) {
-    throw new Error(`Poster upload failed (${res.status})`);
+    throw new Error(`Image upload failed (${res.status})`);
   }
-
   // Cache-bust: the object path is stable across re-uploads, so without this the
-  // browser/CDN would serve the previous poster.
+  // browser/CDN would serve the previous image.
   return `${publicUrl(SUPABASE_URL, path)}?v=${Date.now()}`;
 }

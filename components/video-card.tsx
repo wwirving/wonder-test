@@ -2,9 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Video } from "@/lib/db/schema";
 import { formatRuntime, formatYear } from "@/lib/format";
+import { useVideoBuffering } from "@/lib/use-segment-cycle";
+import type { DiscoverVideo } from "@/lib/mock-videos";
 import type { ViewMode } from "@/components/view-selector";
 import { Tag } from "@/components/tag";
 import { Avatar } from "@/components/avatar";
@@ -12,12 +14,21 @@ import { Avatar } from "@/components/avatar";
 /**
  * The 16:9 poster frame: static poster at rest, muted preview on hover
  * (Vimeo-style — lighter than autoplaying every card), with an always-visible
- * runtime badge. The whole frame links to the watch page.
+ * runtime badge. The whole frame links to the watch page. Nothing streams until
+ * hover (`preload="none"`).
+ *
+ * The hover preview plays the film from the top. Previewing the featured clips
+ * here is a deferred optimisation: seeking a remote MP4 to scattered segments
+ * re-buffers on every jump, and a single cold-seeked clip felt worse than just
+ * rolling from frame one. The featured-clip data is still fetched and passed in
+ * (`video.clips`), so a smarter reel — a stitched preview rendered at index
+ * time, or a still-frame carousel — can switch on here without new plumbing.
  */
-function VideoMedia({ video }: { video: Video }) {
+function VideoMedia({ video }: { video: DiscoverVideo }) {
   const ref = React.useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = React.useState(false);
   const runtime = formatRuntime(video.runtimeSeconds);
+  const buffering = useVideoBuffering(ref, playing);
 
   function enter() {
     const el = ref.current;
@@ -26,9 +37,8 @@ function VideoMedia({ video }: { video: Video }) {
     el.play().catch(() => setPlaying(false));
   }
   function leave() {
-    const el = ref.current;
     setPlaying(false);
-    if (el) el.pause();
+    ref.current?.pause();
   }
 
   return (
@@ -62,6 +72,16 @@ function VideoMedia({ video }: { video: Video }) {
         )}
       </div>
 
+      {playing && buffering && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Loader2
+            className="h-6 w-6 animate-spin text-white/90"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+        </span>
+      )}
+
       {runtime && (
         <span
           className="pointer-events-none absolute right-2 bottom-2 rounded-control px-[0.5em] py-[0.35em] text-xsmall leading-none text-background tabular-nums"
@@ -92,7 +112,7 @@ function Cell({
 }
 
 /** Year / Director / Genre / Runtime table shown in list view. */
-function VideoDataTable({ video }: { video: Video }) {
+function VideoDataTable({ video }: { video: DiscoverVideo }) {
   const widths = {
     year: "w-[16.6667%]",
     director: "w-[33.3333%] pr-4",
@@ -142,7 +162,13 @@ function VideoDataTable({ video }: { video: Video }) {
   );
 }
 
-export function VideoCard({ video, view }: { video: Video; view: ViewMode }) {
+export function VideoCard({
+  video,
+  view,
+}: {
+  video: DiscoverVideo;
+  view: ViewMode;
+}) {
   const isGrid = view === "grid";
   const year = formatYear(video.createdAt);
 
