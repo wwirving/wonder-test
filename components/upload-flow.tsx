@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { capturePoster, probeVideoMetadata } from "@/lib/media";
 import { checkVideoDimensions } from "@/lib/video/limits";
+import { Toaster, type EditorToast } from "@/components/editor/toast";
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/ui/file-upload";
 import { FileCard } from "@/components/upload-file-card";
@@ -33,9 +34,24 @@ export function UploadFlow() {
   const [phase, setPhase] = React.useState<Phase>("idle");
   const [file, setFile] = React.useState<File | null>(null);
   const [progress, setProgress] = React.useState(0);
-  const [error, setError] = React.useState<string | null>(null);
   const [videoId, setVideoId] = React.useState<string | null>(null);
   const upload = React.useRef<UploadHandle | null>(null);
+
+  // Errors (rejected files, failed uploads) surface through the same frosted
+  // toaster the editor uses for indexing notifications — one house style.
+  const [toasts, setToasts] = React.useState<EditorToast[]>([]);
+  const toastId = React.useRef(0);
+  const dismissToast = React.useCallback((id: string) => {
+    setToasts((ts) => ts.filter((t) => t.id !== id));
+  }, []);
+  const showError = React.useCallback(
+    (message: string) => {
+      const id = `t${(toastId.current += 1)}`;
+      setToasts((ts) => [...ts, { id, message }]);
+      setTimeout(() => dismissToast(id), 8000);
+    },
+    [dismissToast],
+  );
 
   const cancel = React.useCallback(() => {
     upload.current?.abort();
@@ -54,7 +70,6 @@ export function UploadFlow() {
   }
 
   async function start(picked: File) {
-    setError(null);
     setFile(picked);
     setProgress(0);
     setPhase("uploading");
@@ -112,7 +127,7 @@ export function UploadFlow() {
       setPhase("done");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(
+      showError(
         err instanceof Error ? err.message : "Something went wrong during upload.",
       );
       reset();
@@ -127,7 +142,7 @@ export function UploadFlow() {
           maxSize={MAX_UPLOAD_BYTES}
           hint={HINT}
           onSelect={start}
-          onError={setError}
+          onError={showError}
         />
       ) : (
         <FileCard
@@ -138,12 +153,7 @@ export function UploadFlow() {
         />
       )}
 
-      {error ? (
-        <p className="animate-enter flex items-center justify-center gap-1.5 text-xsmall text-subtle">
-          <AlertCircle className="h-3.5 w-3.5" strokeWidth={1.5} />
-          {error}
-        </p>
-      ) : null}
+      <Toaster toasts={toasts} onDismiss={dismissToast} />
 
       {phase === "done" && videoId ? (
         <div className="animate-enter flex items-center justify-center gap-3">

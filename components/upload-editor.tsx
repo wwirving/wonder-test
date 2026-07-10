@@ -208,6 +208,19 @@ export function UploadEditor({
             });
           }
         }
+        // Announce a permanent failure once, on the transition into it — same
+        // pattern as the "ready" toasts above.
+        const nowFailed =
+          state.aiTagsStatus === "failed" || state.aiClipsStatus === "failed";
+        const wasFailed =
+          aiTagsRef.current === "failed" || aiClipsRef.current === "failed";
+        if (nowFailed && !wasFailed) {
+          pushToast({
+            message:
+              state.indexingError ??
+              "AI enrichment isn't available for this video.",
+          });
+        }
         aiTagsRef.current = state.aiTagsStatus;
         aiClipsRef.current = state.aiClipsStatus;
         setAiTags(state.aiTagsStatus);
@@ -349,7 +362,11 @@ export function UploadEditor({
     setPublishing(true);
     try {
       // Persists the current form and flips status → published in one call.
-      await publishVideoAction(video.id, patch);
+      const res = await publishVideoAction(video.id, patch);
+      if (!res.ok) {
+        pushToast({ message: res.error });
+        return;
+      }
       setPublished(true);
       setSaveState("saved");
     } catch {
