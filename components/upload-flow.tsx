@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight } from "lucide-react";
-import { capturePoster, probeDuration } from "@/lib/media";
+import { capturePoster, probeVideoMetadata } from "@/lib/media";
+import { checkVideoDimensions } from "@/lib/video/limits";
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/ui/file-upload";
 import { FileCard } from "@/components/upload-file-card";
@@ -18,7 +19,7 @@ import {
 import type { UploadRequest, UploadResponse } from "@/lib/types";
 
 const ACCEPT = ACCEPTED_VIDEO_TYPES.join(",");
-const HINT = `MP4, MOV or WebM · up to ${MAX_UPLOAD_LABEL}`;
+const HINT = `MP4, MOV or WebM · 360p–4K · up to ${MAX_UPLOAD_LABEL}`;
 
 type Phase = "idle" | "uploading" | "done";
 
@@ -59,11 +60,19 @@ export function UploadFlow() {
     setPhase("uploading");
 
     try {
-      // Runtime comes free from the file — probe it in-browser (see probeDuration).
+      // Runtime + dimensions come free from the file — probe in-browser before
+      // anything is created. Files outside the indexable resolution range are
+      // rejected here, so no draft row or bytes exist for a video that Twelve
+      // Labs would refuse. Unknown dimensions pass — the server backstop
+      // (indexing error classification) is the authority.
+      const meta = await probeVideoMetadata(picked);
+      const dims = checkVideoDimensions(meta.width, meta.height);
+      if (!dims.ok) throw new Error(dims.message);
+
       const request: UploadRequest = {
         filename: picked.name,
         contentType: picked.type,
-        runtimeSeconds: await probeDuration(picked),
+        runtimeSeconds: meta.durationS,
       };
 
       // Open a draft row + reserve the Storage path; bytes go direct, not here.

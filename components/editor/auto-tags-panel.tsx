@@ -18,12 +18,15 @@ const has = (arr: string[], v: string) =>
 
 export function AutoTagsPanel({
   status,
+  failureReason,
   suggestions,
   form,
   onApply,
   onApplyAll,
 }: {
   status: AiStatus;
+  /** Why enrichment permanently failed — shown only when status is `failed`. */
+  failureReason?: string | null;
   suggestions: AiTagSuggestions | null;
   form: { synopsis: string; moodTags: string[]; tags: string[] };
   onApply: (field: ApplyField, value: string) => void;
@@ -44,8 +47,10 @@ export function AutoTagsPanel({
       <div className="rounded-card border border-dashed border-[var(--input-strong)] px-6 py-10 text-center">
         <p className="text-small text-foreground">No suggestions available</p>
         <p className="mx-auto mt-1 max-w-xs text-xsmall text-muted">
-          Automatic tagging couldn&apos;t run for this video. Add genre, mood and
-          tags yourself in Details.
+          {status === "failed" && failureReason
+            ? failureReason
+            : "Automatic tagging couldn't run for this video."}{" "}
+          Add genre, mood and tags yourself in Details.
         </p>
       </div>
     );

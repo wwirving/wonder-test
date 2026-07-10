@@ -57,13 +57,19 @@ export async function saveVideo(id: string, patch: EditablePatch): Promise<void>
 /**
  * Save the current form, then flip the video live. Revalidates the discovery
  * feed and this video's watch page so the publish is visible immediately.
- * Publish is never gated by AI enrichment — a title is the only requirement.
+ * Publish is never gated by AI enrichment — a title and description are the
+ * only requirements (validated here as the backstop to the editor's disabled
+ * button, so a stale client can't publish an undescribed film).
  */
 export async function publishVideoAction(
   id: string,
   patch: EditablePatch,
 ): Promise<Video | null> {
-  await updateVideo(db, id, toPatch(patch));
+  const clean = toPatch(patch);
+  if (!clean.title || !clean.synopsis) {
+    throw new Error("A title and description are required to publish.");
+  }
+  await updateVideo(db, id, clean);
   const row = await publishVideo(db, id);
   revalidatePath("/");
   revalidatePath(`/watch/${id}`);

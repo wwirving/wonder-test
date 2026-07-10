@@ -12,10 +12,11 @@
  * Both are safe to call repeatedly and concurrently. See the individual docs for
  * the guards (atomic status claim; row lock on the completion write).
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { clips, videos } from "@/lib/db/schema";
 import type { Database } from "@/lib/types";
 import { getVideo, setAiStatus, updateVideo } from "@/lib/services/videos";
+import { classifyIndexingError } from "@/lib/services/indexing-errors";
 import {
   analyzeClips,
   analyzeTags,
@@ -42,6 +43,8 @@ export type EnrichmentState = {
   clips: SuggestedClip[];
   /** Ids of the clips the creator is currently featuring (persisted selection). */
   featuredClipIds: string[];
+  /** Why enrichment permanently failed (null unless a status is `failed`). */
+  indexingError: string | null;
 };
 
 /**
@@ -50,9 +53,12 @@ export type EnrichmentState = {
  * The atomic claim (`SET ...processing WHERE ai_tags_status = 'pending'`) is the
  * de-dup guard: only the caller whose UPDATE returns a row proceeds to hit
  * Twelve Labs, so overlapping triggers (upload hook + page load + poll) can't
- * double-index. If the TL call fails we roll the claim back to `pending` so a
- * later trigger retries. No-ops if the video is missing, has no uploaded bytes
- * yet, or has already moved past `pending`.
+ * double-index. A failed TL call is classified: a definite 4xx rejection (e.g.
+ * resolution out of range) can never succeed on retry, so the video goes
+ * straight to `failed` with the reason persisted for the editor; anything else
+ * (network, 5xx, rate limit) rolls the claim back to `pending` so a later
+ * trigger retries. No-ops if the video is missing, has no uploaded bytes yet,
+ * or has already moved past `pending`.
  */
 export async function ensureIndexing(
   db: Database,
@@ -68,6 +74,7 @@ export async function ensureIndexing(
       aiTagsStatus: "processing",
       aiClipsStatus: "processing",
       indexingStartedAt: new Date(),
+      indexingError: null,
     })
     .where(and(eq(videos.id, videoId), eq(videos.aiTagsStatus, "pending")))
     .returning({ id: videos.id });
@@ -82,14 +89,41 @@ export async function ensureIndexing(
       tlTaskId: handle.taskId,
       tlVideoId: handle.videoId,
     });
-  } catch {
-    // Roll the claim back so the next trigger retries cleanly.
+  } catch (err) {
+    const { permanent, reason } = classifyIndexingError(err);
+    console.error(
+      `[indexing] kickoff failed for video ${videoId} ` +
+        `(${permanent ? `permanent: ${reason}` : "transient, will retry"})`,
+      err,
+    );
+    if (permanent) {
+      // The video itself is un-indexable — park it as failed with the reason.
+      // Guarded on our own claim (still processing, no task id) so we never
+      // clobber a row the stale-kickoff recovery already reset and re-kicked.
+      await db
+        .update(videos)
+        .set({
+          aiTagsStatus: "failed",
+          aiClipsStatus: "failed",
+          indexingError: reason,
+        })
+        .where(
+          and(
+            eq(videos.id, videoId),
+            eq(videos.aiTagsStatus, "processing"),
+            isNull(videos.tlTaskId),
+          ),
+        );
+      return;
+    }
+    // Transient — roll the claim back so the next trigger retries cleanly.
     await db
       .update(videos)
       .set({
         aiTagsStatus: "pending",
         aiClipsStatus: "pending",
         indexingStartedAt: null,
+        indexingError: null,
       })
       .where(eq(videos.id, videoId));
   }
@@ -136,6 +170,7 @@ export async function reconcileIndexing(
           aiTagsStatus: "pending",
           aiClipsStatus: "pending",
           indexingStartedAt: null,
+          indexingError: null,
         })
         .where(eq(videos.id, videoId));
     }
@@ -151,8 +186,17 @@ export async function reconcileIndexing(
   }
 
   if (task.status === TL_FAILED) {
-    await setAiStatus(db, videoId, "aiTagsStatus", "failed");
-    await setAiStatus(db, videoId, "aiClipsStatus", "failed");
+    console.error(
+      `[indexing] Twelve Labs task ${video.tlTaskId} failed for video ${videoId}`,
+    );
+    await db
+      .update(videos)
+      .set({
+        aiTagsStatus: "failed",
+        aiClipsStatus: "failed",
+        indexingError: "Twelve Labs could not index this video.",
+      })
+      .where(eq(videos.id, videoId));
     return;
   }
   if (task.status !== TL_READY || !tlVideoId) return; // still indexing
@@ -222,6 +266,7 @@ export async function getEnrichmentState(
   return {
     aiTagsStatus: video.aiTagsStatus,
     aiClipsStatus: video.aiClipsStatus,
+    indexingError: video.indexingError ?? null,
     suggestions: video.aiSuggestions ?? null,
     clips: rows.map((c) => ({
       id: c.id,

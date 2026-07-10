@@ -74,6 +74,10 @@ export const videos = pgTable(
     // genuine crash (stuck minutes with no task id) apart from the normal
     // sub-second window between claiming and persisting tlTaskId.
     indexingStartedAt: timestamp("indexing_started_at", { withTimezone: true }),
+    // Why AI enrichment permanently failed (human-readable, shown in the editor).
+    // Set when Twelve Labs rejects the video outright (e.g. resolution out of
+    // range) or the indexing task ends `failed`; null while pending/processing.
+    indexingError: text("indexing_error"),
     // Persisted /analyze auto-tag payload, so suggestions survive a reload/poll
     // and the creator can accept them later. Clips persist to the `clips` table.
     aiSuggestions: jsonb("ai_suggestions").$type<AiTagSuggestions>(),

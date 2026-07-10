@@ -98,6 +98,9 @@ export function UploadEditor({
   const [aiClips, setAiClips] = React.useState<AiStatus>(
     enrichment?.aiClipsStatus ?? video.aiClipsStatus,
   );
+  const [indexingError, setIndexingError] = React.useState<string | null>(
+    enrichment?.indexingError ?? video.indexingError ?? null,
+  );
   const [tagPayload, setTagPayload] = React.useState<AiTagSuggestions | null>(
     enrichment?.suggestions ?? null,
   );
@@ -209,6 +212,7 @@ export function UploadEditor({
         aiClipsRef.current = state.aiClipsStatus;
         setAiTags(state.aiTagsStatus);
         setAiClips(state.aiClipsStatus);
+        setIndexingError(state.indexingError);
         if (isTerminal(state.aiTagsStatus) && isTerminal(state.aiClipsStatus)) {
           return; // both done — stop polling
         }
@@ -385,8 +389,15 @@ export function UploadEditor({
     );
   }, [tagPayload, form]);
 
-  const canPublish = form.title.trim().length > 0;
-  const enrichmentPending = aiTags !== "ready" || aiClips !== "ready";
+  const canPublish =
+    form.title.trim().length > 0 && form.synopsis.trim().length > 0;
+  const publishHint =
+    form.title.trim().length === 0
+      ? "Add a title to publish"
+      : "Add a description to publish";
+  // Pending means still in flight — a `failed` surface is terminal and must not
+  // leave the header spinning "enriching" forever.
+  const enrichmentPending = !isTerminal(aiTags) || !isTerminal(aiClips);
   const isPublished = published;
   const displayPoster = posterPreview ?? posterUrl;
 
@@ -460,7 +471,7 @@ export function UploadEditor({
             <Button
               onClick={handlePublish}
               disabled={!canPublish || publishing}
-              title={canPublish ? undefined : "Add a title to publish"}
+              title={canPublish ? undefined : publishHint}
             >
               {publishing ? "Publishing…" : "Publish"}
             </Button>
@@ -528,6 +539,7 @@ export function UploadEditor({
               <TabsContent value="autotags">
                 <AutoTagsPanel
                   status={aiTags}
+                  failureReason={indexingError}
                   suggestions={tagPayload}
                   form={form}
                   onApply={applyAi}
@@ -537,6 +549,7 @@ export function UploadEditor({
               <TabsContent value="clips">
                 <ClipsPanel
                   status={aiClips}
+                  failureReason={indexingError}
                   clips={clips}
                   videoSrc={video.storagePath}
                   posterUrl={displayPoster}

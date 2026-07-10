@@ -17,6 +17,7 @@ import { Spinner, type AiStatus } from "@/components/editor/status";
  */
 export function ClipsPanel({
   status,
+  failureReason,
   clips,
   videoSrc,
   posterUrl,
@@ -24,6 +25,8 @@ export function ClipsPanel({
   onToggle,
 }: {
   status: AiStatus;
+  /** Why enrichment permanently failed — shown only when status is `failed`. */
+  failureReason?: string | null;
   clips: SuggestedClip[];
   /** Source video URL the segment previews play from. */
   videoSrc: string | null;
@@ -43,7 +46,7 @@ export function ClipsPanel({
       <EmptyState
         icon={<AlertCircle className="h-5 w-5" strokeWidth={1.5} />}
         title="Couldn't find moments"
-        body="Automatic clip detection is unavailable for this video. You can still publish, then feature moments manually later."
+        body={`${failureReason ?? "Automatic clip detection is unavailable for this video."} You can still publish, then feature moments manually later.`}
       />
     );
   }

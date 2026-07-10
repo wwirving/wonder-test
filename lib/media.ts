@@ -1,22 +1,38 @@
 // Browser-only helpers for reading media file metadata client-side.
 
-/** Read a video's duration via a throwaway <video>; null if it can't be probed. */
-export function probeDuration(file: File): Promise<number | null> {
+export type VideoMetadata = {
+  durationS: number | null;
+  width: number | null;
+  height: number | null;
+};
+
+const UNPROBED: VideoMetadata = { durationS: null, width: null, height: null };
+
+/**
+ * Read a video's duration and pixel dimensions via a throwaway <video> — one
+ * probe, everything `loadedmetadata` exposes. Any field is null when the
+ * browser can't determine it (dimensions come back 0×0 for audio-only files or
+ * codecs it can't decode); callers must treat null as unknown, not invalid.
+ */
+export function probeVideoMetadata(file: File): Promise<VideoMetadata> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
     video.preload = "metadata";
-    const finish = (value: number | null) => {
+    const finish = (value: VideoMetadata) => {
       URL.revokeObjectURL(url);
       resolve(value);
     };
     video.onloadedmetadata = () =>
-      finish(
-        Number.isFinite(video.duration) && video.duration > 0
-          ? Math.round(video.duration)
-          : null,
-      );
-    video.onerror = () => finish(null);
+      finish({
+        durationS:
+          Number.isFinite(video.duration) && video.duration > 0
+            ? Math.round(video.duration)
+            : null,
+        width: video.videoWidth || null,
+        height: video.videoHeight || null,
+      });
+    video.onerror = () => finish(UNPROBED);
     video.src = url;
   });
 }

@@ -20,7 +20,7 @@ export type DiscoverVideo = Video & { clips: SuggestedClip[] };
 // each new TL field only needs a default in one place, not on every row.
 const BASE_VIDEOS: Omit<
   Video,
-  "tlTaskId" | "tlVideoId" | "aiSuggestions" | "indexingStartedAt"
+  "tlTaskId" | "tlVideoId" | "aiSuggestions" | "indexingStartedAt" | "indexingError"
 >[] = [
   {
     id: "00000000-0000-0000-0000-000000000001",
@@ -144,6 +144,7 @@ export const MOCK_VIDEOS: Video[] = BASE_VIDEOS.map((v) => ({
   tlVideoId: null,
   aiSuggestions: null,
   indexingStartedAt: null,
+  indexingError: null,
 }));
 
 /**

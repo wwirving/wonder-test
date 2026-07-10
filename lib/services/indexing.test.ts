@@ -2,6 +2,9 @@ import type { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTestDb } from "@/lib/db/test-utils";
 import type { Database } from "@/lib/db/types";
+// Real SDK error class (only @/lib/services/twelve-labs is mocked below) — the
+// classifier must recognise genuine instances.
+import { TwelvelabsApiError } from "twelvelabs-js";
 import { createVideo, getVideo, updateVideo } from "./videos";
 import { listClipsByVideo, setClipFeatured } from "./clips";
 import {
@@ -103,6 +106,44 @@ describe("ensureIndexing", () => {
     expect(row?.aiClipsStatus).toBe("pending");
     expect(row?.tlTaskId).toBeNull();
   });
+
+  it("rolls back to pending on a TL error with no status code (network)", async () => {
+    // The SDK throws TwelvelabsApiError WITHOUT statusCode for network/unknown
+    // failures — those must stay retryable, not park the video as failed.
+    vi.mocked(tl.createIndexingTask).mockRejectedValueOnce(
+      new TwelvelabsApiError({ message: "socket hang up" }),
+    );
+    const v = await uploaded();
+    await ensureIndexing(db, v.id);
+    const row = await getVideo(db, v.id);
+    expect(row?.aiTagsStatus).toBe("pending");
+    expect(row?.indexingError).toBeNull();
+  });
+
+  it("marks the video failed with a reason on a permanent TL rejection", async () => {
+    vi.mocked(tl.createIndexingTask).mockRejectedValue(
+      new TwelvelabsApiError({
+        statusCode: 400,
+        body: {
+          code: "video_resolution_too_low",
+          message: "The resolution of the video is too low.",
+        },
+      }),
+    );
+    const v = await uploaded();
+    await ensureIndexing(db, v.id);
+
+    const row = await getVideo(db, v.id);
+    expect(row?.aiTagsStatus).toBe("failed");
+    expect(row?.aiClipsStatus).toBe("failed");
+    expect(row?.indexingError).toMatch(/resolution is too low/i);
+
+    // Terminal — no later trigger may re-claim and hammer TL again.
+    await ensureIndexing(db, v.id);
+    await reconcileIndexing(db, v.id);
+    expect(tl.createIndexingTask).toHaveBeenCalledTimes(1);
+    expect(tl.getTask).not.toHaveBeenCalled();
+  });
 });
 
 describe("reconcileIndexing", () => {
@@ -142,7 +183,7 @@ describe("reconcileIndexing", () => {
     expect(clips[0]).toMatchObject({ startS: 8, endS: 24, label: "Rain" });
   });
 
-  it("marks both failed when the task failed", async () => {
+  it("marks both failed with a generic reason when the task failed", async () => {
     vi.mocked(tl.getTask).mockResolvedValue({
       status: "failed",
       videoId: "tlvid_1",
@@ -152,6 +193,7 @@ describe("reconcileIndexing", () => {
     const row = await getVideo(db, v.id);
     expect(row?.aiTagsStatus).toBe("failed");
     expect(row?.aiClipsStatus).toBe("failed");
+    expect(row?.indexingError).toBeTruthy();
     expect(tl.analyzeTags).not.toHaveBeenCalled();
   });
 
